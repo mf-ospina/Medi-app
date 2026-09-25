@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SIDISPO · Disponibilidad de Medicamentos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: "#F3F6F5",
+          surface: "#FFFFFF",
+          ink: "#16262B",
+          primary: { DEFAULT: "#0B4F6C", dark: "#073B52" },
+          accent: "#1B7F73",
+          border: "#D9E1E0",
+          status: {
+            okBg: "#E4F5EC", okText: "#1E7A4C", okBorder: "#BFE3CF",
+            lowBg: "#FCF2DC", lowText: "#9A6A16", lowBorder: "#F1DBA8",
+            outBg: "#FBE8E6", outText: "#AB3126", outBorder: "#F1C3BD"
+          }
+        },
+        fontFamily: {
+          sans: ["'IBM Plex Sans'", "sans-serif"],
+          mono: ["'IBM Plex Mono'", "monospace"]
+        }
+      }
+    }
+  };
+</script>
+<style>
+  body { font-family: 'IBM Plex Sans', sans-serif; }
+  .tab-active { color: #073B52; border-color: #073B52; }
+  .tab-inactive { color: rgba(22,38,43,0.5); border-color: transparent; }
+  .tab-inactive:hover { color: rgba(22,38,43,0.8); }
+  ::selection { background: #BFE3CF; }
+</style>
+</head>
+<body class="bg-bg text-ink min-h-screen">
+
+  <!-- Estado de carga -->
+  <div id="app-loading" class="min-h-screen flex items-center justify-center">
+    <p class="text-ink/50 text-sm font-mono">Cargando dataset…</p>
+  </div>
+
+  <div id="app-root" class="hidden">
+
+    <!-- Encabezado -->
+    <header class="border-b border-border bg-surface">
+      <div class="max-w-5xl mx-auto px-5 py-6">
+        <p class="text-xs font-mono text-primary tracking-tight">Prototipo · Ministerio de Salud y Protección Social</p>
+        <h1 class="text-2xl sm:text-3xl font-semibold text-ink mt-1">
+          Sistema de Disponibilidad de Medicamentos de Colombia
+        </h1>
+        <p class="text-ink/60 mt-1.5 max-w-2xl text-sm sm:text-base">
+          Información centralizada sobre existencias de medicamentos en droguerías de Bogotá y Medellín, para consulta ciudadana, actualización de inventario y seguimiento institucional del desabastecimiento.
+        </p>
+      </div>
+    </header>
+
+    <!-- Navegación de pestañas -->
+    <nav class="border-b border-border bg-surface sticky top-0 z-10">
+      <div class="max-w-5xl mx-auto px-5 flex gap-1 overflow-x-auto" role="tablist">
+        <button data-tab-btn="consulta" role="tab" aria-selected="true" class="tab-active whitespace-nowrap px-3 py-3 text-sm font-medium border-b-2 -mb-px transition-colors">
+          Consulta ciudadana
+        </button>
+        <button data-tab-btn="gestion" role="tab" aria-selected="false" class="tab-inactive whitespace-nowrap px-3 py-3 text-sm font-medium border-b-2 -mb-px transition-colors">
+          Gestión de inventario
+        </button>
+        <button data-tab-btn="dashboard" role="tab" aria-selected="false" class="tab-inactive whitespace-nowrap px-3 py-3 text-sm font-medium border-b-2 -mb-px transition-colors">
+          Dashboard institucional
+        </button>
+      </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto px-5 py-8">
+
+      <!-- ============ PESTAÑA 1: CONSULTA CIUDADANA ============ -->
+      <section data-tab-panel="consulta" class="space-y-5">
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label for="consulta-nombre" class="block text-sm font-medium text-ink/70 mb-1.5">Medicamento</label>
+            <input
+              id="consulta-nombre"
+              list="lista-medicamentos"
+              type="text"
+              placeholder="Ej: Acetaminofén 500mg"
+              class="w-full rounded-sm border border-border bg-surface px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+            />
+            <datalist id="lista-medicamentos"></datalist>
+          </div>
+          <div>
+            <label for="consulta-ciudad" class="block text-sm font-medium text-ink/70 mb-1.5">Ciudad</label>
+            <select id="consulta-ciudad" class="w-full rounded-sm border border-border bg-surface px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
+              <option value="">Todas las ciudades</option>
+              <option value="Bogotá">Bogotá</option>
+              <option value="Medellín">Medellín</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex items-baseline justify-between">
+          <h2 class="text-sm font-medium text-ink/70">Droguerías encontradas</h2>
+          <span id="consulta-contador" class="text-xs font-mono text-ink/50"></span>
+        </div>
+
+        <ul id="consulta-resultados" class="space-y-2.5"></ul>
+        <p id="consulta-vacio" class="hidden text-sm text-ink/50 border border-dashed border-border rounded-sm px-4 py-8 text-center">
+          No hay droguerías registradas que coincidan con la búsqueda. Ajusta el nombre del medicamento o la ciudad.
+        </p>
+      </section>
+
+      <!-- ============ PESTAÑA 2: GESTIÓN DE INVENTARIO ============ -->
+      <section data-tab-panel="gestion" class="hidden space-y-8">
+        <div>
+          <h2 class="text-base font-semibold text-ink mb-1">Actualizar stock</h2>
+          <p class="text-sm text-ink/60 mb-4">Simula el reporte de existencias que haría una droguería sobre uno de sus medicamentos.</p>
+
+          <form id="gestion-form" class="border border-border bg-surface rounded-sm p-5 grid sm:grid-cols-2 gap-4">
+            <div>
+              <label for="gestion-medicamento" class="block text-sm font-medium text-ink/70 mb-1.5">Medicamento</label>
+              <select id="gestion-medicamento" required class="w-full rounded-sm border border-border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"></select>
+            </div>
+            <div>
+              <label for="gestion-drogueria" class="block text-sm font-medium text-ink/70 mb-1.5">Droguería</label>
+              <select id="gestion-drogueria" required class="w-full rounded-sm border border-border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"></select>
+            </div>
+            <div>
+              <label for="gestion-estado" class="block text-sm font-medium text-ink/70 mb-1.5">Estado de stock</label>
+              <select id="gestion-estado" required class="w-full rounded-sm border border-border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
+                <option value="Disponible">Disponible</option>
+                <option value="Bajo stock">Bajo stock</option>
+                <option value="Agotado">Agotado</option>
+              </select>
+            </div>
+            <div>
+              <label for="gestion-cantidad" class="block text-sm font-medium text-ink/70 mb-1.5">Cantidad en unidades</label>
+              <input id="gestion-cantidad" type="number" min="0" value="50" required class="w-full rounded-sm border border-border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+            </div>
+            <div class="sm:col-span-2 flex items-center gap-3 pt-1">
+              <button type="submit" class="bg-primary hover:bg-primary-dark text-white text-sm font-medium px-4 py-2.5 rounded-sm transition-colors">
+                Actualizar stock
+              </button>
+              <p id="gestion-confirmacion" class="hidden text-sm text-status-okText"></p>
+            </div>
+          </form>
+        </div>
+
+        <div>
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+            <h2 class="text-base font-semibold text-ink">Inventario actual</h2>
+            <select id="gestion-filtro-drogueria" class="rounded-sm border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"></select>
+          </div>
+          <div class="border border-border rounded-sm bg-surface overflow-x-auto">
+            <table class="w-full text-sm min-w-[560px]">
+              <thead>
+                <tr class="text-left text-ink/50 text-xs uppercase-none border-b border-border">
+                  <th class="py-2.5 pr-4 pl-4 font-medium">Medicamento</th>
+                  <th class="py-2.5 pr-4 font-medium">Droguería</th>
+                  <th class="py-2.5 pr-4 font-medium">Estado</th>
+                  <th class="py-2.5 pr-4 font-medium">Cantidad</th>
+                  <th class="py-2.5 pr-4 font-medium">Actualizado</th>
+                </tr>
+              </thead>
+              <tbody id="gestion-tabla-body" class="px-4"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ PESTAÑA 3: DASHBOARD INSTITUCIONAL ============ -->
+      <section data-tab-panel="dashboard" class="hidden space-y-8">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="border border-border bg-surface rounded-sm p-4">
+            <p class="text-xs text-ink/50 mb-1">Registros agotados</p>
+            <p id="kpi-agotados" class="text-2xl font-mono font-medium text-status-outText">–</p>
+          </div>
+          <div class="border border-border bg-surface rounded-sm p-4">
+            <p class="text-xs text-ink/50 mb-1">Bajo stock</p>
+            <p id="kpi-bajos" class="text-2xl font-mono font-medium text-status-lowText">–</p>
+          </div>
+          <div class="border border-border bg-surface rounded-sm p-4">
+            <p class="text-xs text-ink/50 mb-1">Disponibles</p>
+            <p id="kpi-disponibles" class="text-2xl font-mono font-medium text-status-okText">–</p>
+          </div>
+          <div class="border border-border bg-surface rounded-sm p-4">
+            <p class="text-xs text-ink/50 mb-1">Droguerías con desabastecimiento</p>
+            <p id="kpi-drogueriasAfectadas" class="text-xl font-mono font-medium text-ink">–</p>
+          </div>
+        </div>
+
+        <div>
+          <h2 class="text-base font-semibold text-ink mb-1">Medicamentos con mayor riesgo de desabastecimiento</h2>
+          <p class="text-sm text-ink/60 mb-3">Medicamentos con más registros en estado agotado o bajo stock, entre todas las droguerías monitoreadas.</p>
+          <ul id="dash-ranking" class="space-y-3.5"></ul>
+        </div>
+
+        <div>
+          <h2 class="text-base font-semibold text-ink mb-3">Alertas por ciudad</h2>
+          <div id="dash-alertas-ciudad" class="grid sm:grid-cols-2 gap-3"></div>
+        </div>
+
+        <div>
+          <h2 class="text-base font-semibold text-ink mb-3">Desabastecimientos más recientes</h2>
+          <ul id="dash-criticos" class="space-y-2"></ul>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="border-t border-border mt-8">
+      <div class="max-w-5xl mx-auto px-5 py-6 text-xs text-ink/40">
+        Prototipo con fines demostrativos. Los datos de medicamentos, droguerías e inventario son simulados y no reflejan existencias reales.
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
