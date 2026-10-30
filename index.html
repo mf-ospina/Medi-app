@@ -1,225 +1,282 @@
-<!doctype html>
-<html lang="es">
+<!DOCTYPE html>
+<html lang="es" class="h-full">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>SIDISPO · Disponibilidad de Medicamentos</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          bg: "#F3F6F5",
-          surface: "#FFFFFF",
-          ink: "#16262B",
-          primary: { DEFAULT: "#0B4F6C", dark: "#073B52" },
-          accent: "#1B7F73",
-          border: "#D9E1E0",
-          status: {
-            okBg: "#E4F5EC", okText: "#1E7A4C", okBorder: "#BFE3CF",
-            lowBg: "#FCF2DC", lowText: "#9A6A16", lowBorder: "#F1DBA8",
-            outBg: "#FBE8E6", outText: "#AB3126", outBorder: "#F1C3BD"
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plataforma Centralizada de Medicamentos - Colombia</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0284c7',
+              600: '#0369a1',
+              700: '#075985',
+              900: '#0c4a6e',
+            }
           }
-        },
-        fontFamily: {
-          sans: ["'IBM Plex Sans'", "sans-serif"],
-          mono: ["'IBM Plex Mono'", "monospace"]
         }
       }
     }
-  };
-</script>
-<style>
-  body { font-family: 'IBM Plex Sans', sans-serif; }
-  .tab-active { color: #073B52; border-color: #073B52; }
-  .tab-inactive { color: rgba(22,38,43,0.5); border-color: transparent; }
-  .tab-inactive:hover { color: rgba(22,38,43,0.8); }
-  ::selection { background: #BFE3CF; }
-</style>
+  </script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body class="bg-bg text-ink min-h-screen">
+<body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 min-h-full flex flex-col transition-colors duration-200">
 
-  <!-- Estado de carga -->
-  <div id="app-loading" class="min-h-screen flex items-center justify-center">
-    <p class="text-ink/50 text-sm font-mono">Cargando dataset…</p>
-  </div>
-
-  <div id="app-root" class="hidden">
-
-    <!-- Encabezado -->
-    <header class="border-b border-border bg-surface">
-      <div class="max-w-5xl mx-auto px-5 py-6">
-        <p class="text-xs font-mono text-primary tracking-tight">Prototipo · Ministerio de Salud y Protección Social</p>
-        <h1 class="text-2xl sm:text-3xl font-semibold text-ink mt-1">
-          Sistema de Disponibilidad de Medicamentos de Colombia
-        </h1>
-        <p class="text-ink/60 mt-1.5 max-w-2xl text-sm sm:text-base">
-          Información centralizada sobre existencias de medicamentos en droguerías de Bogotá y Medellín, para consulta ciudadana, actualización de inventario y seguimiento institucional del desabastecimiento.
-        </p>
-      </div>
-    </header>
-
-    <!-- Navegación de pestañas -->
-    <nav class="border-b border-border bg-surface sticky top-0 z-10">
-      <div class="max-w-5xl mx-auto px-5 flex gap-1 overflow-x-auto" role="tablist">
-        <button data-tab-btn="consulta" role="tab" aria-selected="true" class="tab-active whitespace-nowrap px-3 py-3 text-sm font-medium border-b-2 -mb-px transition-colors">
-          Consulta ciudadana
-        </button>
-        <button data-tab-btn="gestion" role="tab" aria-selected="false" class="tab-inactive whitespace-nowrap px-3 py-3 text-sm font-medium border-b-2 -mb-px transition-colors">
-          Gestión de inventario
-        </button>
-        <button data-tab-btn="dashboard" role="tab" aria-selected="false" class="tab-inactive whitespace-nowrap px-3 py-3 text-sm font-medium border-b-2 -mb-px transition-colors">
-          Dashboard institucional
-        </button>
-      </div>
-    </nav>
-
-    <main class="max-w-5xl mx-auto px-5 py-8">
-
-      <!-- ============ PESTAÑA 1: CONSULTA CIUDADANA ============ -->
-      <section data-tab-panel="consulta" class="space-y-5">
-        <div class="grid sm:grid-cols-2 gap-3">
-          <div>
-            <label for="consulta-nombre" class="block text-sm font-medium text-ink/70 mb-1.5">Medicamento</label>
-            <input
-              id="consulta-nombre"
-              list="lista-medicamentos"
-              type="text"
-              placeholder="Ej: Acetaminofén 500mg"
-              class="w-full rounded-sm border border-border bg-surface px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
-            />
-            <datalist id="lista-medicamentos"></datalist>
+  <!-- Header / Barra de Navegación -->
+  <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 bg-brand-600 text-white rounded-lg">
+            <i class="fa-solid fa-pills text-xl"></i>
           </div>
           <div>
-            <label for="consulta-ciudad" class="block text-sm font-medium text-ink/70 mb-1.5">Ciudad</label>
-            <select id="consulta-ciudad" class="w-full rounded-sm border border-border bg-surface px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
-              <option value="">Todas las ciudades</option>
-              <option value="Bogotá">Bogotá</option>
-              <option value="Medellín">Medellín</option>
+            <h1 class="text-lg font-bold leading-tight">Plataforma Centralizada de Medicamentos</h1>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Sistema de Monitoreo e Interoperabilidad (Auto 1282 / Circular 044)</p>
+          </div>
+        </div>
+
+        <!-- Selector de Tema / Modo Oscuro -->
+        <button id="themeToggleBtn" onclick="toggleDarkMode()" class="flex items-center space-x-2 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition">
+          <i id="themeIcon" class="fa-solid fa-moon text-amber-500"></i>
+          <span id="themeText">Modo Oscuro</span>
+        </button>
+      </div>
+
+      <!-- Pestañas de Navegación -->
+      <nav class="flex space-x-8 border-t border-gray-100 dark:border-gray-700/50 pt-2">
+        <button onclick="switchTab('ciudadano')" id="tab-ciudadano" class="tab-btn pb-3 px-1 border-b-2 font-medium text-sm border-brand-600 text-brand-600 dark:text-brand-500 flex items-center space-x-2">
+          <i class="fa-solid fa-user-check"></i>
+          <span>1. Consulta Ciudadana & Fórmulas</span>
+        </button>
+        <button onclick="switchTab('inventario')" id="tab-inventario" class="tab-btn pb-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 flex items-center space-x-2">
+          <i class="fa-solid fa-boxes-stacked"></i>
+          <span>2. Gestión de Inventario (Droguerías)</span>
+        </button>
+        <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn pb-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 flex items-center space-x-2">
+          <i class="fa-solid fa-chart-line"></i>
+          <span>3. Dashboard Institucional</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow">
+
+    <!-- Sistema de Notificación Flotante/Global -->
+    <div id="globalNotification" class="hidden mb-6 p-4 rounded-xl border flex items-center justify-between shadow-sm transition-all">
+      <div class="flex items-center space-x-3">
+        <i id="notifIcon" class="fa-solid fa-circle-info text-lg"></i>
+        <span id="notifMessage" class="text-sm font-medium"></span>
+      </div>
+      <button onclick="hideNotification()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <!-- Pestaña 1: Consulta Ciudadana -->
+    <section id="sec-ciudadano" class="space-y-6">
+      <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <h2 class="text-lg font-bold mb-4 flex items-center space-x-2">
+          <i class="fa-solid fa-id-card text-brand-600 dark:text-brand-500"></i>
+          <span>Autenticación e Identificación de Paciente</span>
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium mb-1">Seleccionar Paciente Autenticado (Cédula)</label>
+            <select id="userSelect" onchange="loadPatientData()" class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+              <option value="1020304050">Sandra Milena Duarte Marín — C.C. 1020304050 (EPS Sanitas / Bogotá)</option>
+              <option value="1019283746">Raúl Andrés Sánchez Mondragón — C.C. 1019283746 (Nueva EPS / Bogotá)</option>
+            </select>
+          </div>
+          <div>
+            <button onclick="loadPatientData()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition flex items-center justify-center space-x-2">
+              <i class="fa-solid fa-arrows-rotate"></i>
+              <span>Consultar Fórmulas</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fórmulas Activas del Paciente -->
+      <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-bold flex items-center space-x-2">
+            <i class="fa-solid fa-file-prescription text-brand-600 dark:text-brand-500"></i>
+            <span>Fórmulas Médicas Vigentes (MIPRES)</span>
+          </h2>
+          <span id="patientBadge" class="px-3 py-1 bg-brand-50 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 rounded-full text-xs font-semibold"></span>
+        </div>
+
+        <div id="formulasList" class="space-y-4">
+          <!-- Se renderiza de forma dinámica desde app.js utilizando data.json -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Pestaña 2: Gestión de Inventario -->
+    <section id="sec-inventario" class="hidden space-y-6">
+      <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <h2 class="text-lg font-bold mb-4 flex items-center space-x-2">
+          <i class="fa-solid fa-pen-to-square text-brand-600 dark:text-brand-500"></i>
+          <span>Actualizar Stock de Droguería (Ingesta de Inventario)</span>
+        </h2>
+        
+        <form id="inventoryForm" onsubmit="handleStockUpdate(event)" class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+          <div>
+            <label class="block text-sm font-medium mb-1">Medicamento</label>
+            <select id="invMedSelect" class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+              <option value="LOS50">Losartán 50mg (Tableta)</option>
+              <option value="INS100">InsuLina Glargina (Inyectable)</option>
+              <option value="AMX500">Amoxicilina 500mg (Cápsula)</option>
+              <option value="AC500">Acetaminofén 500mg (Tableta)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Droguería / Punto</label>
+            <select id="invStoreSelect" class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+              <option value="1">Audifarma Calle 72 (Bogotá)</option>
+              <option value="2">Cafam Fontibón (Bogotá)</option>
+              <option value="3">Cruz Verde Chapinero (Bogotá)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Nuevo Estado</label>
+            <select id="invStatusSelect" class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500">
+              <option value="Disponible">Disponible</option>
+              <option value="Bajo stock">Bajo Stock</option>
+              <option value="Agotado">Agotado</option>
+            </select>
+          </div>
+          <div>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition flex items-center justify-center space-x-2">
+              <i class="fa-solid fa-arrows-rotate"></i>
+              <span>Actualizar Stock</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Tabla de Inventario Virtual Centralizado -->
+      <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+          <h2 class="text-lg font-bold flex items-center space-x-2">
+            <i class="fa-solid fa-table-list text-brand-600 dark:text-brand-500"></i>
+            <span>Inventario Virtual Centralizado</span>
+          </h2>
+          
+          <!-- Filtro de Estado -->
+          <div class="flex items-center space-x-2">
+            <label class="text-xs font-semibold text-gray-500 uppercase">Filtrar Estado:</label>
+            <select id="statusFilter" onchange="renderInventoryTable()" class="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-xs">
+              <option value="TODOS">Todos los estados</option>
+              <option value="Disponible">Disponible</option>
+              <option value="Bajo stock">Bajo Stock</option>
+              <option value="Reservado">Reservado</option>
+              <option value="Agotado">Agotado</option>
             </select>
           </div>
         </div>
 
-        <div class="flex items-baseline justify-between">
-          <h2 class="text-sm font-medium text-ink/70">Droguerías encontradas</h2>
-          <span id="consulta-contador" class="text-xs font-mono text-ink/50"></span>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-700/50 text-xs uppercase text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+              <tr>
+                <th class="px-4 py-3">Medicamento</th>
+                <th class="px-4 py-3">Droguería / Ubicación</th>
+                <th class="px-4 py-3">Estado actual</th>
+                <th class="px-4 py-3">Detalle / Temporizador</th>
+                <th class="px-4 py-3">Último reporte</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryTableBody" class="divide-y divide-gray-200 dark:divide-gray-700">
+              <!-- Renderizado dinámico desde app.js -->
+            </tbody>
+          </table>
         </div>
-
-        <ul id="consulta-resultados" class="space-y-2.5"></ul>
-        <p id="consulta-vacio" class="hidden text-sm text-ink/50 border border-dashed border-border rounded-sm px-4 py-8 text-center">
-          No hay droguerías registradas que coincidan con la búsqueda. Ajusta el nombre del medicamento o la ciudad.
-        </p>
-      </section>
-
-      <!-- ============ PESTAÑA 2: GESTIÓN DE INVENTARIO ============ -->
-      <section data-tab-panel="gestion" class="hidden space-y-8">
-        <div>
-          <h2 class="text-base font-semibold text-ink mb-1">Actualizar stock</h2>
-          <p class="text-sm text-ink/60 mb-4">Simula el reporte de existencias que haría una droguería sobre uno de sus medicamentos.</p>
-
-          <form id="gestion-form" class="border border-border bg-surface rounded-sm p-5 grid sm:grid-cols-2 gap-4">
-            <div>
-              <label for="gestion-medicamento" class="block text-sm font-medium text-ink/70 mb-1.5">Medicamento</label>
-              <select id="gestion-medicamento" required class="w-full rounded-sm border border-border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"></select>
-            </div>
-            <div>
-              <label for="gestion-drogueria" class="block text-sm font-medium text-ink/70 mb-1.5">Droguería</label>
-              <select id="gestion-drogueria" required class="w-full rounded-sm border border-border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"></select>
-            </div>
-            <div>
-              <label for="gestion-estado" class="block text-sm font-medium text-ink/70 mb-1.5">Estado de stock</label>
-              <select id="gestion-estado" required class="w-full rounded-sm border border-border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary">
-                <option value="Disponible">Disponible</option>
-                <option value="Bajo stock">Bajo stock</option>
-                <option value="Agotado">Agotado</option>
-              </select>
-            </div>
-            <div>
-              <label for="gestion-cantidad" class="block text-sm font-medium text-ink/70 mb-1.5">Cantidad en unidades</label>
-              <input id="gestion-cantidad" type="number" min="0" value="50" required class="w-full rounded-sm border border-border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
-            </div>
-            <div class="sm:col-span-2 flex items-center gap-3 pt-1">
-              <button type="submit" class="bg-primary hover:bg-primary-dark text-white text-sm font-medium px-4 py-2.5 rounded-sm transition-colors">
-                Actualizar stock
-              </button>
-              <p id="gestion-confirmacion" class="hidden text-sm text-status-okText"></p>
-            </div>
-          </form>
-        </div>
-
-        <div>
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-            <h2 class="text-base font-semibold text-ink">Inventario actual</h2>
-            <select id="gestion-filtro-drogueria" class="rounded-sm border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"></select>
-          </div>
-          <div class="border border-border rounded-sm bg-surface overflow-x-auto">
-            <table class="w-full text-sm min-w-[560px]">
-              <thead>
-                <tr class="text-left text-ink/50 text-xs uppercase-none border-b border-border">
-                  <th class="py-2.5 pr-4 pl-4 font-medium">Medicamento</th>
-                  <th class="py-2.5 pr-4 font-medium">Droguería</th>
-                  <th class="py-2.5 pr-4 font-medium">Estado</th>
-                  <th class="py-2.5 pr-4 font-medium">Cantidad</th>
-                  <th class="py-2.5 pr-4 font-medium">Actualizado</th>
-                </tr>
-              </thead>
-              <tbody id="gestion-tabla-body" class="px-4"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============ PESTAÑA 3: DASHBOARD INSTITUCIONAL ============ -->
-      <section data-tab-panel="dashboard" class="hidden space-y-8">
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div class="border border-border bg-surface rounded-sm p-4">
-            <p class="text-xs text-ink/50 mb-1">Registros agotados</p>
-            <p id="kpi-agotados" class="text-2xl font-mono font-medium text-status-outText">–</p>
-          </div>
-          <div class="border border-border bg-surface rounded-sm p-4">
-            <p class="text-xs text-ink/50 mb-1">Bajo stock</p>
-            <p id="kpi-bajos" class="text-2xl font-mono font-medium text-status-lowText">–</p>
-          </div>
-          <div class="border border-border bg-surface rounded-sm p-4">
-            <p class="text-xs text-ink/50 mb-1">Disponibles</p>
-            <p id="kpi-disponibles" class="text-2xl font-mono font-medium text-status-okText">–</p>
-          </div>
-          <div class="border border-border bg-surface rounded-sm p-4">
-            <p class="text-xs text-ink/50 mb-1">Droguerías con desabastecimiento</p>
-            <p id="kpi-drogueriasAfectadas" class="text-xl font-mono font-medium text-ink">–</p>
-          </div>
-        </div>
-
-        <div>
-          <h2 class="text-base font-semibold text-ink mb-1">Medicamentos con mayor riesgo de desabastecimiento</h2>
-          <p class="text-sm text-ink/60 mb-3">Medicamentos con más registros en estado agotado o bajo stock, entre todas las droguerías monitoreadas.</p>
-          <ul id="dash-ranking" class="space-y-3.5"></ul>
-        </div>
-
-        <div>
-          <h2 class="text-base font-semibold text-ink mb-3">Alertas por ciudad</h2>
-          <div id="dash-alertas-ciudad" class="grid sm:grid-cols-2 gap-3"></div>
-        </div>
-
-        <div>
-          <h2 class="text-base font-semibold text-ink mb-3">Desabastecimientos más recientes</h2>
-          <ul id="dash-criticos" class="space-y-2"></ul>
-        </div>
-      </section>
-
-    </main>
-
-    <footer class="border-t border-border mt-8">
-      <div class="max-w-5xl mx-auto px-5 py-6 text-xs text-ink/40">
-        Prototipo con fines demostrativos. Los datos de medicamentos, droguerías e inventario son simulados y no reflejan existencias reales.
       </div>
-    </footer>
-  </div>
+    </section>
 
+    <!-- Pestaña 3: Dashboard Institucional -->
+    <section id="sec-dashboard" class="hidden space-y-6">
+      <!-- Indicadores Clave (KPIs) -->
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <span class="text-xs font-semibold text-gray-500 uppercase">Total Puntos Monitoreados</span>
+          <div class="text-2xl font-black text-gray-900 dark:text-white mt-1">10 Droguerías</div>
+          <span class="text-xs text-emerald-600 dark:text-emerald-400 flex items-center mt-1">
+            <i class="fa-solid fa-circle-check mr-1"></i> 100% Conectadas (APIs)
+          </span>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <span class="text-xs font-semibold text-gray-500 uppercase">Reservas Activas (2h)</span>
+          <div id="kpiActiveReservations" class="text-2xl font-black text-brand-600 dark:text-brand-400 mt-1">0</div>
+          <span class="text-xs text-gray-500 mt-1">Garantía de entrega ciudadana</span>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <span class="text-xs font-semibold text-gray-500 uppercase">En Fila Virtual (Lista Espera)</span>
+          <div id="kpiWaitlistCount" class="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">0</div>
+          <span class="text-xs text-gray-500 mt-1">Asignación prioritaria automática</span>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <span class="text-xs font-semibold text-gray-500 uppercase">Alertas de Agotado</span>
+          <div id="kpiShortageAlerts" class="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">0</div>
+          <span class="text-xs text-rose-500 flex items-center mt-1">
+            <i class="fa-solid fa-triangle-exclamation mr-1"></i> Alerta a SuperSalud
+          </span>
+        </div>
+      </div>
+
+      <!-- Panel de Trazabilidad e Impacto -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <h2 class="text-lg font-bold mb-4 flex items-center space-x-2">
+            <i class="fa-solid fa-list-check text-brand-600"></i>
+            <span>Estado de Fila Virtual (Lista de Espera)</span>
+          </h2>
+          <div id="waitlistDashboardView" class="space-y-3">
+            <!-- Renderizado dinámico desde app.js -->
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <h2 class="text-lg font-bold mb-4 flex items-center space-x-2">
+            <i class="fa-solid fa-shield-halved text-brand-600"></i>
+            <span>Cumplimiento Regulatorio (Circular 044 de 2025)</span>
+          </h2>
+          <div class="space-y-4 text-sm">
+            <div class="p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-200 dark:border-gray-600">
+              <span class="font-semibold block text-brand-600 dark:text-brand-400">Trazabilidad en MIPRES</span>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-0.5">Reporte automático de prescripción, reserva y entrega efectiva para detección de demanda insatisfecha.</p>
+            </div>
+            <div class="p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-200 dark:border-gray-600">
+              <span class="font-semibold block text-emerald-600 dark:text-emerald-400">Protección de Datos (Ley 1581)</span>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-0.5">Identificación por cédula autenticada y almacenamiento con seudonimización cifrada en el panel institucional.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 py-4 text-center text-xs text-gray-500 dark:text-gray-400">
+    <p>Proyecto de Arquitectura Empresarial — Universidad Jorge Tadeo Lozano (2026)</p>
+  </footer>
+
+  <!-- Carga del Script de Lógica de Negocio -->
   <script src="app.js"></script>
 </body>
 </html>

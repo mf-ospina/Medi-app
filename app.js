@@ -1,992 +1,614 @@
+/* =====================================================================
+   Plataforma Centralizada de Medicamentos — Lógica de negocio
+   Archivos del proyecto:  index.html (estructura)  ·  app.js (lógica)  ·  data.json (datos)
+
+   Carga de datos: intenta fetch('data.json'). Si el navegador lo bloquea
+   (abrir index.html con doble clic usa file://), usa FALLBACK_DATA, una
+   copia idéntica de data.json que va al final de este archivo.
+   ===================================================================== */
+
+const RESERVA_MS = 2 * 60 * 60 * 1000; // la reserva garantiza el medicamento por 2 horas
+
+/* ---------- Estado en memoria ---------- */
+let DB = null;       // catálogo: medicamentos, droguerías, pacientes, fórmulas
+let INV = [];        // inventario: una fila por medicamento × droguería
+let RESERVAS = [];   // reservas activas (con temporizador)
+let ESPERA = [];     // fila virtual (lista de espera) por medicamento
+let CEDULA_ACTUAL = null;
+let notifTimer = null;
+let tickCount = 0;
+
+const $ = (id) => document.getElementById(id);
+
+/* ---------- Carga de datos ---------- */
+async function loadData() {
+  try {
+    const res = await fetch("data.json", { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return await res.json();
+  } catch (err) {
+    console.warn("No se pudo leer data.json (normal al abrir con doble clic). Usando datos embebidos.", err);
+    return JSON.parse(JSON.stringify(FALLBACK_DATA));
+  }
+}
+
+function initState(data) {
+  const now = Date.now();
+  DB = data;
+  INV = data.inventario.map((r) => ({
+    medicamentoId: r.medicamentoId,
+    drogueriaId: r.drogueriaId,
+    estado: r.estado,
+    ultimoReporte: now - r.ultimoReporteHaceMin * 60000
+  }));
+  RESERVAS = data.reservas.map((r) => ({
+    id: r.id,
+    cedula: r.cedula,
+    medicamentoId: r.medicamentoId,
+    drogueriaId: r.drogueriaId,
+    expiraEn: now + r.minutosRestantes * 60000
+  }));
+  ESPERA = data.listaEspera.map((e) => ({
+    cedula: e.cedula,
+    medicamentoId: e.medicamentoId,
+    desde: now - e.enEsperaHaceMin * 60000
+  }));
+}
+
+/* ---------- Helpers de dominio ---------- */
+const getMed = (id) => DB.medicamentos.find((m) => m.id === id);
+const getStore = (id) => DB.droguerias.find((d) => d.id === String(id));
+const getPaciente = (ced) => DB.pacientes.find((p) => p.cedula === ced);
+const medLabel = (m) => `${m.nombre} (${m.presentacion})`;
+const maskCedula = (c) => "C.C. ****" + c.slice(-4);
+
+const findRow = (medId, storeId) =>
+  INV.find((r) => r.medicamentoId === medId && r.drogueriaId === String(storeId));
+const activeReserva = (medId, storeId) =>
+  RESERVAS.find((r) => r.medicamentoId === medId && r.drogueriaId === String(storeId));
+const visibleState = (row) => (activeReserva(row.medicamentoId, row.drogueriaId) ? "Reservado" : row.estado);
+
+const queueFor = (medId) => ESPERA.filter((e) => e.medicamentoId === medId).sort((a, b) => a.desde - b.desde);
+const queuePos = (cedula, medId) => queueFor(medId).findIndex((e) => e.cedula === cedula) + 1;
+
+function fmtCountdown(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`;
+}
+
+function relTime(ts) {
+  const min = Math.floor((Date.now() - ts) / 60000);
+  if (min < 1) return "hace instantes";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  return `hace ${Math.floor(h / 24)} d`;
+}
+
+const STATE_BADGE = {
+  "Disponible": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  "Bajo stock": "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  "Reservado":  "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300",
+  "Agotado":    "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300"
+};
+const badge = (estado) =>
+  `<span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATE_BADGE[estado]}">${estado}</span>`;
+
+/* ---------- Tema claro / oscuro ---------- */
+function applyTheme(dark) {
+  document.documentElement.classList.toggle("dark", dark);
+  $("themeIcon").className = dark ? "fa-solid fa-sun text-amber-400" : "fa-solid fa-moon text-amber-500";
+  $("themeText").textContent = dark ? "Modo Claro" : "Modo Oscuro";
+}
+function toggleDarkMode() {
+  const dark = !document.documentElement.classList.contains("dark");
+  applyTheme(dark);
+  try { localStorage.setItem("pcm_tema", dark ? "dark" : "light"); } catch (e) { /* sin persistencia */ }
+}
+
+/* ---------- Pestañas ---------- */
+const TAB_ACTIVE = ["border-brand-600", "text-brand-600", "dark:text-brand-500"];
+const TAB_INACTIVE = ["border-transparent", "text-gray-500", "hover:text-gray-700", "dark:text-gray-400", "dark:hover:text-gray-200"];
+
+function switchTab(name) {
+  ["ciudadano", "inventario", "dashboard"].forEach((t) => {
+    const active = t === name;
+    $("sec-" + t).classList.toggle("hidden", !active);
+    const btn = $("tab-" + t);
+    TAB_ACTIVE.forEach((c) => btn.classList.toggle(c, active));
+    TAB_INACTIVE.forEach((c) => btn.classList.toggle(c, !active));
+  });
+  renderAll();
+}
+
+/* ---------- Notificación global ---------- */
+const NOTIF_COLORS = {
+  success: { icon: "fa-circle-check",         cls: "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-200" },
+  info:    { icon: "fa-circle-info",          cls: "bg-sky-50 border-sky-200 text-sky-800 dark:bg-sky-900/30 dark:border-sky-800 dark:text-sky-200" },
+  warning: { icon: "fa-triangle-exclamation", cls: "bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-200" },
+  error:   { icon: "fa-circle-xmark",         cls: "bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-200" }
+};
+
+function showNotification(message, type = "info") {
+  const box = $("globalNotification");
+  Object.values(NOTIF_COLORS).forEach((c) => box.classList.remove(...c.cls.split(" ")));
+  const cfg = NOTIF_COLORS[type] || NOTIF_COLORS.info;
+  box.classList.add(...cfg.cls.split(" "));
+  $("notifIcon").className = `fa-solid ${cfg.icon} text-lg`;
+  $("notifMessage").textContent = message;
+  box.classList.remove("hidden");
+  clearTimeout(notifTimer);
+  notifTimer = setTimeout(hideNotification, 8000);
+}
+function hideNotification() {
+  $("globalNotification").classList.add("hidden");
+}
+
+/* ---------- Reglas de negocio: reservas y fila virtual ---------- */
+// Si hay existencias en la droguería y alguien espera en la fila, se le asigna una reserva de 2 h automáticamente.
+function processWaitlist(medId, storeId) {
+  const row = findRow(medId, storeId);
+  if (!row || row.estado === "Agotado" || activeReserva(medId, storeId)) return null;
+  const next = queueFor(medId)[0];
+  if (!next) return null;
+  ESPERA = ESPERA.filter((e) => e !== next);
+  const reserva = {
+    id: "R-" + String(Date.now()).slice(-6),
+    cedula: next.cedula,
+    medicamentoId: medId,
+    drogueriaId: String(storeId),
+    expiraEn: Date.now() + RESERVA_MS
+  };
+  RESERVAS.push(reserva);
+  return reserva;
+}
+
+const describeAssignment = (r) =>
+  `Asignación prioritaria: reserva de 2 h generada para ${maskCedula(r.cedula)} en ${getStore(r.drogueriaId).nombre}.`;
+
+function reservar(medId, storeId) {
+  const row = findRow(medId, storeId);
+  if (!row || visibleState(row) === "Agotado" || visibleState(row) === "Reservado") {
+    return showNotification("Esa droguería ya no tiene unidades disponibles para reservar.", "error");
+  }
+  if (RESERVAS.some((r) => r.cedula === CEDULA_ACTUAL && r.medicamentoId === medId)) {
+    return showNotification("Ya tienes una reserva activa para este medicamento.", "warning");
+  }
+  RESERVAS.push({
+    id: "R-" + String(Date.now()).slice(-6),
+    cedula: CEDULA_ACTUAL,
+    medicamentoId: medId,
+    drogueriaId: String(storeId),
+    expiraEn: Date.now() + RESERVA_MS
+  });
+  renderAll();
+  showNotification(`Reserva confirmada: ${medLabel(getMed(medId))} en ${getStore(storeId).nombre}. Tienes 2 horas para reclamarlo.`, "success");
+}
+
+function cancelarReserva(medId, storeId) {
+  RESERVAS = RESERVAS.filter((r) => !(r.cedula === CEDULA_ACTUAL && r.medicamentoId === medId && r.drogueriaId === String(storeId)));
+  const asign = processWaitlist(medId, storeId);
+  renderAll();
+  showNotification("Reserva cancelada." + (asign ? " " + describeAssignment(asign) : ""), "info");
+}
+
+function unirseFila(medId) {
+  if (queuePos(CEDULA_ACTUAL, medId)) return;
+  ESPERA.push({ cedula: CEDULA_ACTUAL, medicamentoId: medId, desde: Date.now() });
+  renderAll();
+  showNotification(`Te uniste a la fila virtual de ${getMed(medId).nombre}. Posición ${queuePos(CEDULA_ACTUAL, medId)}.`, "info");
+}
+
+function salirFila(medId) {
+  ESPERA = ESPERA.filter((e) => !(e.cedula === CEDULA_ACTUAL && e.medicamentoId === medId));
+  renderAll();
+  showNotification("Saliste de la fila virtual.", "info");
+}
+
+/* ---------- Pestaña 1: Consulta ciudadana ---------- */
+function loadPatientData() {
+  renderPatient();
+  const pac = getPaciente(CEDULA_ACTUAL);
+  const n = DB.formulas.filter((f) => f.cedula === CEDULA_ACTUAL).length;
+  showNotification(`Se encontraron ${n} fórmulas vigentes para ${pac.nombre}.`, "info");
+}
+
+function renderPatient() {
+  CEDULA_ACTUAL = $("userSelect").value;
+  const pac = getPaciente(CEDULA_ACTUAL);
+  const formulas = DB.formulas.filter((f) => f.cedula === CEDULA_ACTUAL);
+  $("patientBadge").textContent = `${pac.eps} · ${formulas.length} fórmulas`;
+  $("formulasList").innerHTML = formulas.length
+    ? formulas.map(formulaCard).join("")
+    : `<p class="text-sm text-gray-500">No hay fórmulas vigentes para este paciente.</p>`;
+}
+
+function formulaCard(f) {
+  const med = getMed(f.medicamentoId);
+  const miReserva = RESERVAS.find((r) => r.cedula === CEDULA_ACTUAL && r.medicamentoId === med.id);
+  const pos = queuePos(CEDULA_ACTUAL, med.id);
+
+  const filas = DB.droguerias.map((d) => {
+    const row = findRow(med.id, d.id);
+    const estado = row ? visibleState(row) : "Agotado";
+    let accion = "";
+    if (miReserva && miReserva.drogueriaId === d.id) {
+      accion = `<span class="text-xs font-semibold text-sky-700 dark:text-sky-300"><i class="fa-regular fa-clock mr-1"></i><span data-countdown="${miReserva.expiraEn}">${fmtCountdown(miReserva.expiraEn - Date.now())}</span></span>
+                <button data-action="cancelar" data-med="${med.id}" data-store="${d.id}" class="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">Cancelar</button>`;
+    } else if (!miReserva && !pos && (estado === "Disponible" || estado === "Bajo stock")) {
+      accion = `<button data-action="reservar" data-med="${med.id}" data-store="${d.id}" class="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium transition">Reservar 2 h</button>`;
+    }
+    return `
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-2.5">
+        <div>
+          <p class="text-sm font-medium">${d.nombre}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">${d.ciudad}</p>
+        </div>
+        <div class="flex items-center gap-3">${badge(estado)}${accion}</div>
+      </div>`;
+  }).join("");
+
+  const hayExistencias = DB.droguerias.some((d) => {
+    const row = findRow(med.id, d.id);
+    return row && (visibleState(row) === "Disponible" || visibleState(row) === "Bajo stock");
+  });
+
+  let pie = "";
+  if (miReserva) {
+    pie = `<div class="mt-3 p-3 rounded-lg text-xs bg-sky-50 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200"><i class="fa-solid fa-circle-check mr-1"></i>Reserva activa en ${getStore(miReserva.drogueriaId).nombre}. Reclama tu medicamento antes de que expire.</div>`;
+  } else if (pos) {
+    pie = `<div class="mt-3 p-3 rounded-lg text-xs flex items-center justify-between gap-3 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+             <span><i class="fa-solid fa-hourglass-half mr-1"></i>Estás en la fila virtual · posición ${pos}. Se te asignará una reserva automáticamente cuando haya existencias.</span>
+             <button data-action="salir-fila" data-med="${med.id}" class="px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition shrink-0">Salir de la fila</button>
+           </div>`;
+  } else if (!hayExistencias) {
+    pie = `<div class="mt-3 p-3 rounded-lg text-xs flex items-center justify-between gap-3 bg-rose-50 text-rose-800 dark:bg-rose-900/30 dark:text-rose-200">
+             <span><i class="fa-solid fa-triangle-exclamation mr-1"></i>Sin existencias en la red de droguerías.</span>
+             <button data-action="fila" data-med="${med.id}" class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium transition shrink-0">Unirme a la fila virtual</button>
+           </div>`;
+  }
+
+  return `
+    <article class="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-1">
+        <div>
+          <h3 class="font-bold">${medLabel(med)}</h3>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${f.posologia} · Cantidad: ${f.cantidad}</p>
+        </div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 sm:text-right">
+          <p>Fórmula ${f.id}</p>
+          <p>Vigente hasta ${f.vigenteHasta}</p>
+        </div>
+      </div>
+      <div class="mt-3 divide-y divide-gray-100 dark:divide-gray-700/60">${filas}</div>
+      ${pie}
+    </article>`;
+}
+
+/* ---------- Pestaña 2: Gestión de inventario ---------- */
+function handleStockUpdate(ev) {
+  ev.preventDefault();
+  const medId = $("invMedSelect").value;
+  const storeId = $("invStoreSelect").value;
+  const estado = $("invStatusSelect").value;
+
+  let row = findRow(medId, storeId);
+  if (!row) {
+    row = { medicamentoId: medId, drogueriaId: storeId, estado, ultimoReporte: Date.now() };
+    INV.push(row);
+  }
+  row.estado = estado;
+  row.ultimoReporte = Date.now();
+
+  let msg = `Stock actualizado: ${medLabel(getMed(medId))} en ${getStore(storeId).nombre} ahora figura como "${estado}".`;
+  let type = "success";
+  const asign = processWaitlist(medId, storeId);
+  if (asign) {
+    msg += " " + describeAssignment(asign);
+  } else if (estado === "Agotado") {
+    msg += " Se generó una alerta de desabastecimiento para SuperSalud.";
+    type = "warning";
+  }
+  if (activeReserva(medId, storeId) && !asign) msg += " La reserva vigente se mantiene.";
+
+  renderAll();
+  showNotification(msg, type);
+}
+
+function renderInventoryTable() {
+  const filtro = $("statusFilter").value;
+  const filas = INV
+    .map((row) => ({ row, estado: visibleState(row) }))
+    .filter((x) => filtro === "TODOS" || x.estado === filtro);
+
+  $("inventoryTableBody").innerHTML = filas.length
+    ? filas.map(({ row, estado }) => {
+        const med = getMed(row.medicamentoId);
+        const st = getStore(row.drogueriaId);
+        const res = activeReserva(row.medicamentoId, row.drogueriaId);
+        let detalle;
+        if (res) {
+          detalle = `<i class="fa-regular fa-clock mr-1 text-sky-600 dark:text-sky-400"></i>${maskCedula(res.cedula)} · expira en <span class="font-mono font-semibold" data-countdown="${res.expiraEn}">${fmtCountdown(res.expiraEn - Date.now())}</span>`;
+        } else if (estado === "Agotado") {
+          const n = queueFor(row.medicamentoId).length;
+          detalle = `Sin existencias · ${n} en fila virtual`;
+        } else if (estado === "Bajo stock") {
+          detalle = "Reposición recomendada";
+        } else {
+          detalle = "Existencias normales";
+        }
+        return `
+          <tr>
+            <td class="px-4 py-3 font-medium">${medLabel(med)}</td>
+            <td class="px-4 py-3">${st.nombre} <span class="text-xs text-gray-500 dark:text-gray-400">(${st.ciudad})</span></td>
+            <td class="px-4 py-3">${badge(estado)}</td>
+            <td class="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">${detalle}</td>
+            <td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">${relTime(row.ultimoReporte)}</td>
+          </tr>`;
+      }).join("")
+    : `<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No hay registros con ese estado.</td></tr>`;
+}
+
+/* ---------- Pestaña 3: Dashboard institucional ---------- */
+function renderDashboard() {
+  $("kpiActiveReservations").textContent = RESERVAS.length;
+  $("kpiWaitlistCount").textContent = ESPERA.length;
+  $("kpiShortageAlerts").textContent = INV.filter((r) => r.estado === "Agotado").length;
+
+  const lista = [...ESPERA].sort((a, b) => a.desde - b.desde);
+  $("waitlistDashboardView").innerHTML = lista.length
+    ? lista.map((e) => `
+        <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-200 dark:border-gray-600">
+          <div>
+            <p class="text-sm font-semibold">${maskCedula(e.cedula)}</p>
+            <p class="text-xs text-gray-600 dark:text-gray-300">${medLabel(getMed(e.medicamentoId))}</p>
+          </div>
+          <div class="text-right">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">Posición ${queuePos(e.cedula, e.medicamentoId)}</span>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${relTime(e.desde)}</p>
+          </div>
+        </div>`).join("")
+    : `<p class="text-sm text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center">No hay ciudadanos en fila virtual.</p>`;
+}
+
+/* ---------- Render global y temporizador ---------- */
+function renderAll() {
+  renderPatient();
+  renderInventoryTable();
+  renderDashboard();
+}
+
+function tick() {
+  const now = Date.now();
+  const vencidas = RESERVAS.filter((r) => r.expiraEn <= now);
+  if (vencidas.length) {
+    RESERVAS = RESERVAS.filter((r) => r.expiraEn > now);
+    const asignaciones = vencidas.map((r) => processWaitlist(r.medicamentoId, r.drogueriaId)).filter(Boolean);
+    renderAll();
+    let msg = `Venció ${vencidas.length === 1 ? "una reserva" : vencidas.length + " reservas"} y se liberó el stock.`;
+    if (asignaciones.length) msg += " " + asignaciones.map(describeAssignment).join(" ");
+    showNotification(msg, "warning");
+  }
+  document.querySelectorAll("[data-countdown]").forEach((el) => {
+    el.textContent = fmtCountdown(Number(el.dataset.countdown) - now);
+  });
+  if (++tickCount % 30 === 0) renderAll(); // refresca los "hace X min"
+}
+
+/* ---------- Arranque ---------- */
+async function init() {
+  let dark = false;
+  try { dark = localStorage.getItem("pcm_tema") === "dark"; } catch (e) { /* sin persistencia */ }
+  applyTheme(dark);
+
+  initState(await loadData());
+
+  $("formulasList").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-action]");
+    if (!btn) return;
+    const { action, med, store } = btn.dataset;
+    if (action === "reservar") reservar(med, store);
+    else if (action === "cancelar") cancelarReserva(med, store);
+    else if (action === "fila") unirseFila(med);
+    else if (action === "salir-fila") salirFila(med);
+  });
+
+  renderAll();
+  setInterval(tick, 1000);
+}
+
+/* Copia de respaldo de data.json (se usa solo si fetch() no está disponible, p. ej. file://) */
 const FALLBACK_DATA = {
   "medicamentos": [
     {
-      "id": "m1",
-      "nombre": "Acetaminofén 500mg",
-      "categoria": "Analgésico / Antipirético"
-    },
-    {
-      "id": "m2",
-      "nombre": "Ibuprofeno 400mg",
-      "categoria": "Antiinflamatorio"
-    },
-    {
-      "id": "m3",
-      "nombre": "Amoxicilina 500mg",
-      "categoria": "Antibiótico"
-    },
-    {
-      "id": "m4",
+      "id": "LOS50",
       "nombre": "Losartán 50mg",
-      "categoria": "Antihipertensivo"
+      "presentacion": "Tableta"
     },
     {
-      "id": "m5",
-      "nombre": "Metformina 850mg",
-      "categoria": "Antidiabético"
-    },
-    {
-      "id": "m6",
-      "nombre": "Salbutamol Inhalador",
-      "categoria": "Broncodilatador"
-    },
-    {
-      "id": "m7",
-      "nombre": "Omeprazol 20mg",
-      "categoria": "Antiácido"
-    },
-    {
-      "id": "m8",
+      "id": "INS100",
       "nombre": "Insulina Glargina",
-      "categoria": "Antidiabético (insulina)"
+      "presentacion": "Inyectable"
     },
     {
-      "id": "m9",
-      "nombre": "Loratadina 10mg",
-      "categoria": "Antihistamínico"
+      "id": "AMX500",
+      "nombre": "Amoxicilina 500mg",
+      "presentacion": "Cápsula"
     },
     {
-      "id": "m10",
-      "nombre": "Dexametasona 4mg",
-      "categoria": "Corticosteroide"
+      "id": "AC500",
+      "nombre": "Acetaminofén 500mg",
+      "presentacion": "Tableta"
     }
   ],
   "droguerias": [
     {
-      "id": "d1",
-      "nombre": "Farmatodo Chapinero",
-      "ciudad": "Bogotá",
-      "direccion": "Cra 13 #63-42",
-      "telefono": "601-742-1190"
+      "id": "1",
+      "nombre": "Audifarma Calle 72",
+      "ciudad": "Bogotá"
     },
     {
-      "id": "d2",
-      "nombre": "Cruz Verde Kennedy",
-      "ciudad": "Bogotá",
-      "direccion": "Av. Ciudad de Cali #38-15 Sur",
-      "telefono": "601-450-2201"
-    },
-    {
-      "id": "d3",
-      "nombre": "Droguería La Rebaja Suba",
-      "ciudad": "Bogotá",
-      "direccion": "Cl 145 #91-30",
-      "telefono": "601-681-9034"
-    },
-    {
-      "id": "d4",
-      "nombre": "Farmacia San Bernardo",
-      "ciudad": "Bogotá",
-      "direccion": "Cra 7 #182-40",
-      "telefono": "601-678-2255"
-    },
-    {
-      "id": "d5",
+      "id": "2",
       "nombre": "Cafam Fontibón",
-      "ciudad": "Bogotá",
-      "direccion": "Cl 22 #96-15",
-      "telefono": "601-263-4410"
+      "ciudad": "Bogotá"
     },
     {
-      "id": "d6",
-      "nombre": "Cruz Verde Laureles",
-      "ciudad": "Medellín",
-      "direccion": "Cra 70 #34-20",
-      "telefono": "604-260-1188"
+      "id": "3",
+      "nombre": "Cruz Verde Chapinero",
+      "ciudad": "Bogotá"
+    }
+  ],
+  "pacientes": [
+    {
+      "cedula": "1020304050",
+      "nombre": "Sandra Milena Duarte Marín",
+      "eps": "EPS Sanitas",
+      "ciudad": "Bogotá"
     },
     {
-      "id": "d7",
-      "nombre": "Farmatodo El Poblado",
-      "ciudad": "Medellín",
-      "direccion": "Cl 10 #40-15",
-      "telefono": "604-311-7742"
+      "cedula": "1019283746",
+      "nombre": "Raúl Andrés Sánchez Mondragón",
+      "eps": "Nueva EPS",
+      "ciudad": "Bogotá"
+    }
+  ],
+  "formulas": [
+    {
+      "id": "MP-20261020-0148",
+      "cedula": "1020304050",
+      "medicamentoId": "LOS50",
+      "cantidad": 30,
+      "posologia": "1 tableta cada 12 horas",
+      "fechaPrescripcion": "2026-10-20",
+      "vigenteHasta": "2026-11-19"
     },
     {
-      "id": "d8",
-      "nombre": "Droguería Popular Belén",
-      "ciudad": "Medellín",
-      "direccion": "Cra 76 #33B-40",
-      "telefono": "604-235-9012"
+      "id": "MP-20261020-0149",
+      "cedula": "1020304050",
+      "medicamentoId": "INS100",
+      "cantidad": 1,
+      "posologia": "10 UI por vía subcutánea cada noche",
+      "fechaPrescripcion": "2026-10-20",
+      "vigenteHasta": "2026-11-19"
     },
     {
-      "id": "d9",
-      "nombre": "La Rebaja Bello",
-      "ciudad": "Medellín",
-      "direccion": "Cl 50 #45-30",
-      "telefono": "604-461-2299"
+      "id": "MP-20261020-0150",
+      "cedula": "1020304050",
+      "medicamentoId": "AC500",
+      "cantidad": 20,
+      "posologia": "1 tableta cada 8 horas si hay dolor",
+      "fechaPrescripcion": "2026-10-20",
+      "vigenteHasta": "2026-11-19"
     },
     {
-      "id": "d10",
-      "nombre": "Farmacias Pasteur Envigado",
-      "ciudad": "Medellín",
-      "direccion": "Cra 43A #35-20",
-      "telefono": "604-339-5567"
+      "id": "MP-20261026-0231",
+      "cedula": "1019283746",
+      "medicamentoId": "AMX500",
+      "cantidad": 21,
+      "posologia": "1 cápsula cada 8 horas por 7 días",
+      "fechaPrescripcion": "2026-10-26",
+      "vigenteHasta": "2026-11-25"
+    },
+    {
+      "id": "MP-20261026-0232",
+      "cedula": "1019283746",
+      "medicamentoId": "INS100",
+      "cantidad": 1,
+      "posologia": "8 UI por vía subcutánea cada noche",
+      "fechaPrescripcion": "2026-10-26",
+      "vigenteHasta": "2026-11-25"
     }
   ],
   "inventario": [
     {
-      "id": "i1",
-      "medicamentoId": "m1",
-      "drogueriaId": "d1",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-22"
+      "medicamentoId": "LOS50",
+      "drogueriaId": "1",
+      "estado": "Disponible",
+      "ultimoReporteHaceMin": 12
     },
     {
-      "id": "i2",
-      "medicamentoId": "m2",
-      "drogueriaId": "d1",
-      "stock": "Disponible",
-      "cantidad": 340,
-      "ultimaActualizacion": "2026-09-23"
+      "medicamentoId": "LOS50",
+      "drogueriaId": "2",
+      "estado": "Bajo stock",
+      "ultimoReporteHaceMin": 47
     },
     {
-      "id": "i3",
-      "medicamentoId": "m3",
-      "drogueriaId": "d1",
-      "stock": "Bajo stock",
-      "cantidad": 18,
-      "ultimaActualizacion": "2026-09-21"
+      "medicamentoId": "LOS50",
+      "drogueriaId": "3",
+      "estado": "Disponible",
+      "ultimoReporteHaceMin": 5
     },
     {
-      "id": "i4",
-      "medicamentoId": "m4",
-      "drogueriaId": "d1",
-      "stock": "Disponible",
-      "cantidad": 210,
-      "ultimaActualizacion": "2026-09-23"
+      "medicamentoId": "INS100",
+      "drogueriaId": "1",
+      "estado": "Agotado",
+      "ultimoReporteHaceMin": 130
     },
     {
-      "id": "i5",
-      "medicamentoId": "m7",
-      "drogueriaId": "d1",
-      "stock": "Disponible",
-      "cantidad": 150,
-      "ultimaActualizacion": "2026-09-20"
+      "medicamentoId": "INS100",
+      "drogueriaId": "2",
+      "estado": "Agotado",
+      "ultimoReporteHaceMin": 95
     },
     {
-      "id": "i6",
-      "medicamentoId": "m9",
-      "drogueriaId": "d1",
-      "stock": "Disponible",
-      "cantidad": 400,
-      "ultimaActualizacion": "2026-09-22"
+      "medicamentoId": "INS100",
+      "drogueriaId": "3",
+      "estado": "Agotado",
+      "ultimoReporteHaceMin": 210
     },
     {
-      "id": "i7",
-      "medicamentoId": "m1",
-      "drogueriaId": "d2",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-23"
+      "medicamentoId": "AMX500",
+      "drogueriaId": "1",
+      "estado": "Disponible",
+      "ultimoReporteHaceMin": 22
     },
     {
-      "id": "i8",
-      "medicamentoId": "m2",
-      "drogueriaId": "d2",
-      "stock": "Bajo stock",
-      "cantidad": 22,
-      "ultimaActualizacion": "2026-09-22"
+      "medicamentoId": "AMX500",
+      "drogueriaId": "2",
+      "estado": "Disponible",
+      "ultimoReporteHaceMin": 31
     },
     {
-      "id": "i9",
-      "medicamentoId": "m5",
-      "drogueriaId": "d2",
-      "stock": "Disponible",
-      "cantidad": 180,
-      "ultimaActualizacion": "2026-09-21"
+      "medicamentoId": "AMX500",
+      "drogueriaId": "3",
+      "estado": "Bajo stock",
+      "ultimoReporteHaceMin": 78
     },
     {
-      "id": "i10",
-      "medicamentoId": "m6",
-      "drogueriaId": "d2",
-      "stock": "Bajo stock",
-      "cantidad": 9,
-      "ultimaActualizacion": "2026-09-23"
+      "medicamentoId": "AC500",
+      "drogueriaId": "1",
+      "estado": "Agotado",
+      "ultimoReporteHaceMin": 180
     },
     {
-      "id": "i11",
-      "medicamentoId": "m8",
-      "drogueriaId": "d2",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-20"
+      "medicamentoId": "AC500",
+      "drogueriaId": "2",
+      "estado": "Bajo stock",
+      "ultimoReporteHaceMin": 64
     },
     {
-      "id": "i12",
-      "medicamentoId": "m10",
-      "drogueriaId": "d2",
-      "stock": "Disponible",
-      "cantidad": 95,
-      "ultimaActualizacion": "2026-09-22"
-    },
+      "medicamentoId": "AC500",
+      "drogueriaId": "3",
+      "estado": "Agotado",
+      "ultimoReporteHaceMin": 150
+    }
+  ],
+  "reservas": [
     {
-      "id": "i13",
-      "medicamentoId": "m1",
-      "drogueriaId": "d3",
-      "stock": "Bajo stock",
-      "cantidad": 15,
-      "ultimaActualizacion": "2026-09-23"
-    },
+      "id": "R-0001",
+      "cedula": "1019283746",
+      "medicamentoId": "AMX500",
+      "drogueriaId": "3",
+      "minutosRestantes": 78
+    }
+  ],
+  "listaEspera": [
     {
-      "id": "i14",
-      "medicamentoId": "m3",
-      "drogueriaId": "d3",
-      "stock": "Disponible",
-      "cantidad": 260,
-      "ultimaActualizacion": "2026-09-21"
-    },
-    {
-      "id": "i15",
-      "medicamentoId": "m4",
-      "drogueriaId": "d3",
-      "stock": "Bajo stock",
-      "cantidad": 30,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i16",
-      "medicamentoId": "m7",
-      "drogueriaId": "d3",
-      "stock": "Disponible",
-      "cantidad": 190,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i17",
-      "medicamentoId": "m9",
-      "drogueriaId": "d3",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-19"
-    },
-    {
-      "id": "i18",
-      "medicamentoId": "m10",
-      "drogueriaId": "d3",
-      "stock": "Disponible",
-      "cantidad": 70,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i19",
-      "medicamentoId": "m1",
-      "drogueriaId": "d4",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i20",
-      "medicamentoId": "m2",
-      "drogueriaId": "d4",
-      "stock": "Disponible",
-      "cantidad": 300,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i21",
-      "medicamentoId": "m5",
-      "drogueriaId": "d4",
-      "stock": "Bajo stock",
-      "cantidad": 25,
-      "ultimaActualizacion": "2026-09-20"
-    },
-    {
-      "id": "i22",
-      "medicamentoId": "m6",
-      "drogueriaId": "d4",
-      "stock": "Disponible",
-      "cantidad": 60,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i23",
-      "medicamentoId": "m8",
-      "drogueriaId": "d4",
-      "stock": "Bajo stock",
-      "cantidad": 12,
-      "ultimaActualizacion": "2026-09-21"
-    },
-    {
-      "id": "i24",
-      "medicamentoId": "m1",
-      "drogueriaId": "d5",
-      "stock": "Disponible",
-      "cantidad": 220,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i25",
-      "medicamentoId": "m3",
-      "drogueriaId": "d5",
-      "stock": "Bajo stock",
-      "cantidad": 20,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i26",
-      "medicamentoId": "m4",
-      "drogueriaId": "d5",
-      "stock": "Disponible",
-      "cantidad": 180,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i27",
-      "medicamentoId": "m7",
-      "drogueriaId": "d5",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-18"
-    },
-    {
-      "id": "i28",
-      "medicamentoId": "m9",
-      "drogueriaId": "d5",
-      "stock": "Disponible",
-      "cantidad": 310,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i29",
-      "medicamentoId": "m10",
-      "drogueriaId": "d5",
-      "stock": "Bajo stock",
-      "cantidad": 14,
-      "ultimaActualizacion": "2026-09-21"
-    },
-    {
-      "id": "i30",
-      "medicamentoId": "m1",
-      "drogueriaId": "d6",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i31",
-      "medicamentoId": "m2",
-      "drogueriaId": "d6",
-      "stock": "Disponible",
-      "cantidad": 280,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i32",
-      "medicamentoId": "m5",
-      "drogueriaId": "d6",
-      "stock": "Disponible",
-      "cantidad": 200,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i33",
-      "medicamentoId": "m6",
-      "drogueriaId": "d6",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-20"
-    },
-    {
-      "id": "i34",
-      "medicamentoId": "m8",
-      "drogueriaId": "d6",
-      "stock": "Bajo stock",
-      "cantidad": 10,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i35",
-      "medicamentoId": "m1",
-      "drogueriaId": "d7",
-      "stock": "Bajo stock",
-      "cantidad": 12,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i36",
-      "medicamentoId": "m3",
-      "drogueriaId": "d7",
-      "stock": "Disponible",
-      "cantidad": 240,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i37",
-      "medicamentoId": "m4",
-      "drogueriaId": "d7",
-      "stock": "Disponible",
-      "cantidad": 195,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i38",
-      "medicamentoId": "m7",
-      "drogueriaId": "d7",
-      "stock": "Disponible",
-      "cantidad": 175,
-      "ultimaActualizacion": "2026-09-21"
-    },
-    {
-      "id": "i39",
-      "medicamentoId": "m9",
-      "drogueriaId": "d7",
-      "stock": "Bajo stock",
-      "cantidad": 28,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i40",
-      "medicamentoId": "m10",
-      "drogueriaId": "d7",
-      "stock": "Disponible",
-      "cantidad": 88,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i41",
-      "medicamentoId": "m1",
-      "drogueriaId": "d8",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i42",
-      "medicamentoId": "m2",
-      "drogueriaId": "d8",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-19"
-    },
-    {
-      "id": "i43",
-      "medicamentoId": "m5",
-      "drogueriaId": "d8",
-      "stock": "Bajo stock",
-      "cantidad": 16,
-      "ultimaActualizacion": "2026-09-21"
-    },
-    {
-      "id": "i44",
-      "medicamentoId": "m6",
-      "drogueriaId": "d8",
-      "stock": "Disponible",
-      "cantidad": 45,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i45",
-      "medicamentoId": "m8",
-      "drogueriaId": "d8",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-18"
-    },
-    {
-      "id": "i46",
-      "medicamentoId": "m1",
-      "drogueriaId": "d9",
-      "stock": "Disponible",
-      "cantidad": 260,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i47",
-      "medicamentoId": "m3",
-      "drogueriaId": "d9",
-      "stock": "Bajo stock",
-      "cantidad": 19,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i48",
-      "medicamentoId": "m4",
-      "drogueriaId": "d9",
-      "stock": "Disponible",
-      "cantidad": 205,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i49",
-      "medicamentoId": "m7",
-      "drogueriaId": "d9",
-      "stock": "Disponible",
-      "cantidad": 160,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i50",
-      "medicamentoId": "m9",
-      "drogueriaId": "d9",
-      "stock": "Disponible",
-      "cantidad": 340,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i51",
-      "medicamentoId": "m10",
-      "drogueriaId": "d9",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-17"
-    },
-    {
-      "id": "i52",
-      "medicamentoId": "m1",
-      "drogueriaId": "d10",
-      "stock": "Agotado",
-      "cantidad": 0,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i53",
-      "medicamentoId": "m2",
-      "drogueriaId": "d10",
-      "stock": "Disponible",
-      "cantidad": 310,
-      "ultimaActualizacion": "2026-09-22"
-    },
-    {
-      "id": "i54",
-      "medicamentoId": "m5",
-      "drogueriaId": "d10",
-      "stock": "Disponible",
-      "cantidad": 175,
-      "ultimaActualizacion": "2026-09-23"
-    },
-    {
-      "id": "i55",
-      "medicamentoId": "m6",
-      "drogueriaId": "d10",
-      "stock": "Bajo stock",
-      "cantidad": 11,
-      "ultimaActualizacion": "2026-09-21"
-    },
-    {
-      "id": "i56",
-      "medicamentoId": "m8",
-      "drogueriaId": "d10",
-      "stock": "Disponible",
-      "cantidad": 40,
-      "ultimaActualizacion": "2026-09-22"
+      "cedula": "1019283746",
+      "medicamentoId": "INS100",
+      "enEsperaHaceMin": 35
     }
   ]
 };
-/* ============================================================
-   Plataforma Centralizada de Disponibilidad de Medicamentos
-   Prototipo funcional — sin backend, todo corre en el navegador.
-
-   Carga de datos:
-   1) Intenta fetch('./data.json') — funciona si el archivo se sirve
-      desde un servidor local (recomendado: `python3 -m http.server`).
-   2) Si el navegador bloquea fetch() por abrir el archivo con
-      doble clic (protocolo file://), usa FALLBACK_DATA, una copia
-      idéntica embebida más abajo, para que el prototipo funcione
-      siempre "tal cual", sin instalar nada.
-   ============================================================ */
-
-let STATE = {
-  medicamentos: [],
-  droguerias: [],
-  inventario: []
-};
-
-const STORAGE_KEY = "cdm_inventario_editado_v1";
-
-const STATUS_ORDER = ["Agotado", "Bajo stock", "Disponible"];
-
-const STATUS_STYLES = {
-  "Disponible": {
-    badge: "bg-status-okBg text-status-okText border border-status-okBorder",
-    dot: "bg-status-okText",
-    border: "border-l-status-okText"
-  },
-  "Bajo stock": {
-    badge: "bg-status-lowBg text-status-lowText border border-status-lowBorder",
-    dot: "bg-status-lowText",
-    border: "border-l-status-lowText"
-  },
-  "Agotado": {
-    badge: "bg-status-outBg text-status-outText border border-status-outBorder",
-    dot: "bg-status-outText",
-    border: "border-l-status-outText"
-  }
-};
-
-function medNombre(id) {
-  const m = STATE.medicamentos.find((x) => x.id === id);
-  return m ? m.nombre : id;
-}
-
-function drogNombre(id) {
-  const d = STATE.droguerias.find((x) => x.id === id);
-  return d ? d : null;
-}
-
-function fmtFecha(iso) {
-  const d = new Date(iso + "T00:00:00");
-  if (isNaN(d)) return iso;
-  return d.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-async function loadData() {
-  // 1. ¿Hay ediciones guardadas de una sesión anterior en este navegador?
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) {
-    try {
-      STATE = JSON.parse(saved);
-      return;
-    } catch (e) {
-      /* si está corrupto, seguimos con la carga normal */
-    }
-  }
-
-  // 2. Intentar cargar el archivo real data.json
-  try {
-    const res = await fetch("./data.json", { cache: "no-store" });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    STATE = await res.json();
-    return;
-  } catch (e) {
-    console.warn("No se pudo leer data.json vía fetch (normal si abriste el archivo con doble clic). Usando dataset embebido de respaldo.", e);
-  }
-
-  // 3. Respaldo embebido — garantiza que el prototipo funcione siempre
-  STATE = JSON.parse(JSON.stringify(FALLBACK_DATA));
-}
-
-function persist() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
-  } catch (e) {
-    console.warn("No se pudo guardar en localStorage", e);
-  }
-}
-/* ---------------------------------------------------------
-   Navegación entre pestañas
-   --------------------------------------------------------- */
-function initTabs() {
-  const buttons = document.querySelectorAll("[data-tab-btn]");
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const target = btn.getAttribute("data-tab-btn");
-      buttons.forEach((b) => {
-        const active = b === btn;
-        b.setAttribute("aria-selected", active ? "true" : "false");
-        b.classList.toggle("tab-active", active);
-        b.classList.toggle("tab-inactive", !active);
-      });
-      document.querySelectorAll("[data-tab-panel]").forEach((p) => {
-        p.classList.toggle("hidden", p.getAttribute("data-tab-panel") !== target);
-      });
-      if (target === "dashboard") renderDashboard();
-      if (target === "gestion") renderGestionTabla();
-    });
-  });
-}
-
-/* ---------------------------------------------------------
-   Pestaña 1 — Consulta ciudadana
-   --------------------------------------------------------- */
-function initConsulta() {
-  const inputNombre = document.getElementById("consulta-nombre");
-  const selectCiudad = document.getElementById("consulta-ciudad");
-
-  // Sugerencias de medicamentos (datalist)
-  const datalist = document.getElementById("lista-medicamentos");
-  datalist.innerHTML = STATE.medicamentos
-    .map((m) => `<option value="${m.nombre}"></option>`)
-    .join("");
-
-  inputNombre.addEventListener("input", renderConsulta);
-  selectCiudad.addEventListener("change", renderConsulta);
-
-  renderConsulta();
-}
-
-function renderConsulta() {
-  const nombreFiltro = document.getElementById("consulta-nombre").value.trim().toLowerCase();
-  const ciudadFiltro = document.getElementById("consulta-ciudad").value;
-  const resultsEl = document.getElementById("consulta-resultados");
-  const emptyEl = document.getElementById("consulta-vacio");
-  const countEl = document.getElementById("consulta-contador");
-
-  let filas = STATE.inventario
-    .map((inv) => {
-      const med = STATE.medicamentos.find((m) => m.id === inv.medicamentoId);
-      const drog = STATE.droguerias.find((d) => d.id === inv.drogueriaId);
-      return { inv, med, drog };
-    })
-    .filter(({ med, drog }) => med && drog)
-    .filter(({ med }) => (nombreFiltro ? med.nombre.toLowerCase().includes(nombreFiltro) : true))
-    .filter(({ drog }) => (ciudadFiltro ? drog.ciudad === ciudadFiltro : true));
-
-  // Orden: primero lo disponible, para responder rápido "¿dónde sí hay?"
-  filas.sort((a, b) => STATUS_ORDER.indexOf(a.inv.stock) - STATUS_ORDER.indexOf(b.inv.stock));
-  // Dentro del mismo estado, priorizar disponibilidad y orden alfabético de droguería
-  filas.sort((a, b) => {
-    const diff = (STATUS_ORDER.indexOf(a.inv.stock) === 2 ? 0 : 1) - (STATUS_ORDER.indexOf(b.inv.stock) === 2 ? 0 : 1);
-    return 0;
-  });
-  filas.sort((a, b) => {
-    const rank = (s) => (s === "Disponible" ? 0 : s === "Bajo stock" ? 1 : 2);
-    if (rank(a.inv.stock) !== rank(b.inv.stock)) return rank(a.inv.stock) - rank(b.inv.stock);
-    return a.drog.nombre.localeCompare(b.drog.nombre);
-  });
-
-  countEl.textContent = filas.length === 1 ? "1 resultado" : `${filas.length} resultados`;
-
-  if (filas.length === 0) {
-    resultsEl.innerHTML = "";
-    emptyEl.classList.remove("hidden");
-    return;
-  }
-  emptyEl.classList.add("hidden");
-
-  resultsEl.innerHTML = filas
-    .map(({ inv, med, drog }) => {
-      const s = STATUS_STYLES[inv.stock];
-      return `
-        <li class="border-l-4 ${s.border} bg-surface border border-border rounded-sm px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <p class="font-semibold text-ink">${drog.nombre}</p>
-            <p class="text-sm text-ink/70">${med.nombre} · ${drog.ciudad}</p>
-            <p class="text-sm text-ink/60">${drog.direccion} · ${drog.telefono}</p>
-          </div>
-          <div class="flex flex-col sm:items-end gap-1 shrink-0">
-            <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-sm ${s.badge}">
-              <span class="w-1.5 h-1.5 rounded-full ${s.dot}"></span>${inv.stock}
-            </span>
-            <span class="text-xs font-mono text-ink/50">Actualizado ${fmtFecha(inv.ultimaActualizacion)}</span>
-          </div>
-        </li>`;
-    })
-    .join("");
-}
-
-/* ---------------------------------------------------------
-   Pestaña 2 — Gestión de inventario
-   --------------------------------------------------------- */
-function initGestion() {
-  const selectMed = document.getElementById("gestion-medicamento");
-  const selectDrog = document.getElementById("gestion-drogueria");
-  const form = document.getElementById("gestion-form");
-  const filtroDrog = document.getElementById("gestion-filtro-drogueria");
-
-  selectMed.innerHTML = STATE.medicamentos
-    .map((m) => `<option value="${m.id}">${m.nombre}</option>`)
-    .join("");
-  selectDrog.innerHTML = STATE.droguerias
-    .map((d) => `<option value="${d.id}">${d.nombre} (${d.ciudad})</option>`)
-    .join("");
-  filtroDrog.innerHTML =
-    `<option value="">Todas las droguerías</option>` +
-    STATE.droguerias.map((d) => `<option value="${d.id}">${d.nombre} (${d.ciudad})</option>`).join("");
-
-  filtroDrog.addEventListener("change", renderGestionTabla);
-
-  form.addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const medicamentoId = selectMed.value;
-    const drogueriaId = selectDrog.value;
-    const stock = document.getElementById("gestion-estado").value;
-    const cantidadRaw = document.getElementById("gestion-cantidad").value;
-    const cantidad = stock === "Agotado" ? 0 : Math.max(0, parseInt(cantidadRaw || "0", 10));
-
-    let registro = STATE.inventario.find(
-      (i) => i.medicamentoId === medicamentoId && i.drogueriaId === drogueriaId
-    );
-    const hoy = new Date().toISOString().slice(0, 10);
-
-    if (registro) {
-      registro.stock = stock;
-      registro.cantidad = cantidad;
-      registro.ultimaActualizacion = hoy;
-    } else {
-      registro = {
-        id: "i" + Date.now(),
-        medicamentoId,
-        drogueriaId,
-        stock,
-        cantidad,
-        ultimaActualizacion: hoy
-      };
-      STATE.inventario.push(registro);
-    }
-
-    persist();
-    renderGestionTabla();
-    showGestionConfirmacion(medNombre(medicamentoId), drogNombre(drogueriaId), stock);
-    form.reset();
-    selectMed.selectedIndex = 0;
-    selectDrog.selectedIndex = 0;
-    document.getElementById("gestion-estado").selectedIndex = 0;
-  });
-
-  // Reflejar cantidad = 0 automáticamente y deshabilitarla si el estado es "Agotado"
-  document.getElementById("gestion-estado").addEventListener("change", (ev) => {
-    const cantidadInput = document.getElementById("gestion-cantidad");
-    if (ev.target.value === "Agotado") {
-      cantidadInput.value = 0;
-      cantidadInput.disabled = true;
-    } else {
-      cantidadInput.disabled = false;
-      if (!cantidadInput.value) cantidadInput.value = 50;
-    }
-  });
-
-  renderGestionTabla();
-}
-
-function showGestionConfirmacion(medNom, drog, estado) {
-  const el = document.getElementById("gestion-confirmacion");
-  el.textContent = `Stock actualizado: ${medNom} en ${drog ? drog.nombre : ""} ahora figura como "${estado}".`;
-  el.classList.remove("hidden");
-  clearTimeout(showGestionConfirmacion._t);
-  showGestionConfirmacion._t = setTimeout(() => el.classList.add("hidden"), 4500);
-}
-
-function renderGestionTabla() {
-  const tbody = document.getElementById("gestion-tabla-body");
-  const filtro = document.getElementById("gestion-filtro-drogueria").value;
-  if (!tbody) return;
-
-  let filas = STATE.inventario
-    .map((inv) => ({
-      inv,
-      med: STATE.medicamentos.find((m) => m.id === inv.medicamentoId),
-      drog: STATE.droguerias.find((d) => d.id === inv.drogueriaId)
-    }))
-    .filter(({ med, drog }) => med && drog)
-    .filter(({ drog }) => (filtro ? drog.id === filtro : true))
-    .sort((a, b) => b.inv.ultimaActualizacion.localeCompare(a.inv.ultimaActualizacion));
-
-  tbody.innerHTML = filas
-    .map(({ inv, med, drog }) => {
-      const s = STATUS_STYLES[inv.stock];
-      return `
-        <tr class="border-b border-border last:border-0">
-          <td class="py-2.5 pr-4 font-medium text-ink">${med.nombre}</td>
-          <td class="py-2.5 pr-4 text-ink/70">${drog.nombre} <span class="text-ink/40">· ${drog.ciudad}</span></td>
-          <td class="py-2.5 pr-4">
-            <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-sm ${s.badge}">
-              <span class="w-1.5 h-1.5 rounded-full ${s.dot}"></span>${inv.stock}
-            </span>
-          </td>
-          <td class="py-2.5 pr-4 font-mono text-ink/70">${inv.cantidad}</td>
-          <td class="py-2.5 font-mono text-ink/50">${fmtFecha(inv.ultimaActualizacion)}</td>
-        </tr>`;
-    })
-    .join("") || `<tr><td colspan="5" class="py-6 text-center text-ink/50">Sin registros para este filtro.</td></tr>`;
-}
-
-/* ---------------------------------------------------------
-   Pestaña 3 — Dashboard institucional
-   --------------------------------------------------------- */
-function renderDashboard() {
-  const inv = STATE.inventario;
-  const totalRegistros = inv.length;
-  const agotados = inv.filter((i) => i.stock === "Agotado");
-  const bajos = inv.filter((i) => i.stock === "Bajo stock");
-  const disponibles = inv.filter((i) => i.stock === "Disponible");
-
-  const drogueriasConAgotado = new Set(agotados.map((i) => i.drogueriaId));
-  const pctDrogueriasAfectadas = STATE.droguerias.length
-    ? Math.round((drogueriasConAgotado.size / STATE.droguerias.length) * 100)
-    : 0;
-
-  document.getElementById("kpi-agotados").textContent = agotados.length;
-  document.getElementById("kpi-bajos").textContent = bajos.length;
-  document.getElementById("kpi-disponibles").textContent = disponibles.length;
-  document.getElementById("kpi-drogueriasAfectadas").textContent = `${drogueriasConAgotado.size} de ${STATE.droguerias.length} (${pctDrogueriasAfectadas}%)`;
-
-  // Ranking de medicamentos con más puntos de desabastecimiento (agotado + bajo stock)
-  const riesgoPorMed = {};
-  STATE.medicamentos.forEach((m) => (riesgoPorMed[m.id] = { agotado: 0, bajo: 0, total: 0 }));
-  inv.forEach((i) => {
-    if (!riesgoPorMed[i.medicamentoId]) return;
-    if (i.stock === "Agotado") riesgoPorMed[i.medicamentoId].agotado++;
-    if (i.stock === "Bajo stock") riesgoPorMed[i.medicamentoId].bajo++;
-  });
-  const ranking = Object.entries(riesgoPorMed)
-    .map(([id, v]) => ({ id, ...v, total: v.agotado + v.bajo }))
-    .filter((r) => r.total > 0)
-    .sort((a, b) => b.agotado - a.agotado || b.total - a.total)
-    .slice(0, 6);
-
-  const maxTotal = Math.max(1, ...ranking.map((r) => r.total));
-  const rankingEl = document.getElementById("dash-ranking");
-  rankingEl.innerHTML = ranking
-    .map((r) => {
-      const nombre = medNombre(r.id);
-      const pctAgotado = (r.agotado / maxTotal) * 100;
-      const pctBajo = (r.bajo / maxTotal) * 100;
-      return `
-        <li>
-          <div class="flex items-baseline justify-between mb-1">
-            <span class="text-sm font-medium text-ink">${nombre}</span>
-            <span class="text-xs font-mono text-ink/50">${r.agotado} agotado · ${r.bajo} bajo stock</span>
-          </div>
-          <div class="h-2 w-full bg-bg rounded-sm overflow-hidden flex">
-            <div class="h-full bg-status-outText" style="width:${pctAgotado}%"></div>
-            <div class="h-full bg-status-lowText" style="width:${pctBajo}%"></div>
-          </div>
-        </li>`;
-    })
-    .join("") || `<li class="text-sm text-ink/50">No hay alertas de desabastecimiento registradas.</li>`;
-
-  // Alertas por ciudad
-  const ciudades = [...new Set(STATE.droguerias.map((d) => d.ciudad))];
-  const alertasEl = document.getElementById("dash-alertas-ciudad");
-  alertasEl.innerHTML = ciudades
-    .map((ciudad) => {
-      const drogIds = STATE.droguerias.filter((d) => d.ciudad === ciudad).map((d) => d.id);
-      const agotadosCiudad = agotados.filter((i) => drogIds.includes(i.drogueriaId));
-      const bajosCiudad = bajos.filter((i) => drogIds.includes(i.drogueriaId));
-      const medsUnicos = new Set(agotadosCiudad.map((i) => i.medicamentoId));
-      return `
-        <div class="border border-border rounded-sm p-4 bg-surface">
-          <p class="font-semibold text-ink mb-2">${ciudad}</p>
-          <p class="text-sm text-ink/70">${agotadosCiudad.length} registros agotados · ${bajosCiudad.length} en bajo stock</p>
-          <p class="text-sm text-ink/70">${medsUnicos.size} medicamento(s) distinto(s) agotados en la ciudad</p>
-        </div>`;
-    })
-    .join("");
-
-  // Registros críticos recientes (agotado, más reciente primero)
-  const criticosEl = document.getElementById("dash-criticos");
-  const criticos = [...agotados]
-    .sort((a, b) => b.ultimaActualizacion.localeCompare(a.ultimaActualizacion))
-    .slice(0, 8);
-  criticosEl.innerHTML =
-    criticos
-      .map((i) => {
-        const drog = STATE.droguerias.find((d) => d.id === i.drogueriaId);
-        return `
-        <li class="border-l-4 border-l-status-outText bg-surface border border-border rounded-sm px-4 py-2.5 flex items-center justify-between gap-3">
-          <div>
-            <p class="text-sm font-medium text-ink">${medNombre(i.medicamentoId)}</p>
-            <p class="text-xs text-ink/60">${drog ? drog.nombre + " · " + drog.ciudad : ""}</p>
-          </div>
-          <span class="text-xs font-mono text-ink/50 shrink-0">${fmtFecha(i.ultimaActualizacion)}</span>
-        </li>`;
-      })
-      .join("") || `<li class="text-sm text-ink/50">Sin desabastecimientos activos.</li>`;
-}
-
-/* ---------------------------------------------------------
-   Arranque
-   --------------------------------------------------------- */
-async function init() {
-  await loadData();
-  initTabs();
-  initConsulta();
-  initGestion();
-  renderDashboard();
-  document.getElementById("app-loading").classList.add("hidden");
-  document.getElementById("app-root").classList.remove("hidden");
-}
-
-document.addEventListener("DOMContentLoaded", init);
+init();

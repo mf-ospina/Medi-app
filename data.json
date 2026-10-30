@@ -1,93 +1,53 @@
 {
   "medicamentos": [
-    { "id": "m1",  "nombre": "Acetaminofén 500mg",   "categoria": "Analgésico / Antipirético" },
-    { "id": "m2",  "nombre": "Ibuprofeno 400mg",      "categoria": "Antiinflamatorio" },
-    { "id": "m3",  "nombre": "Amoxicilina 500mg",     "categoria": "Antibiótico" },
-    { "id": "m4",  "nombre": "Losartán 50mg",         "categoria": "Antihipertensivo" },
-    { "id": "m5",  "nombre": "Metformina 850mg",      "categoria": "Antidiabético" },
-    { "id": "m6",  "nombre": "Salbutamol Inhalador",  "categoria": "Broncodilatador" },
-    { "id": "m7",  "nombre": "Omeprazol 20mg",        "categoria": "Antiácido" },
-    { "id": "m8",  "nombre": "Insulina Glargina",     "categoria": "Antidiabético (insulina)" },
-    { "id": "m9",  "nombre": "Loratadina 10mg",       "categoria": "Antihistamínico" },
-    { "id": "m10", "nombre": "Dexametasona 4mg",      "categoria": "Corticosteroide" }
+    { "id": "LOS50",  "nombre": "Losartán 50mg",      "presentacion": "Tableta" },
+    { "id": "INS100", "nombre": "Insulina Glargina",  "presentacion": "Inyectable" },
+    { "id": "AMX500", "nombre": "Amoxicilina 500mg",  "presentacion": "Cápsula" },
+    { "id": "AC500",  "nombre": "Acetaminofén 500mg", "presentacion": "Tableta" }
   ],
+
   "droguerias": [
-    { "id": "d1",  "nombre": "Farmatodo Chapinero",          "ciudad": "Bogotá",   "direccion": "Cra 13 #63-42",         "telefono": "601-742-1190" },
-    { "id": "d2",  "nombre": "Cruz Verde Kennedy",            "ciudad": "Bogotá",   "direccion": "Av. Ciudad de Cali #38-15 Sur", "telefono": "601-450-2201" },
-    { "id": "d3",  "nombre": "Droguería La Rebaja Suba",      "ciudad": "Bogotá",   "direccion": "Cl 145 #91-30",         "telefono": "601-681-9034" },
-    { "id": "d4",  "nombre": "Farmacia San Bernardo",         "ciudad": "Bogotá",   "direccion": "Cra 7 #182-40",         "telefono": "601-678-2255" },
-    { "id": "d5",  "nombre": "Cafam Fontibón",                "ciudad": "Bogotá",   "direccion": "Cl 22 #96-15",          "telefono": "601-263-4410" },
-    { "id": "d6",  "nombre": "Cruz Verde Laureles",           "ciudad": "Medellín", "direccion": "Cra 70 #34-20",         "telefono": "604-260-1188" },
-    { "id": "d7",  "nombre": "Farmatodo El Poblado",          "ciudad": "Medellín", "direccion": "Cl 10 #40-15",          "telefono": "604-311-7742" },
-    { "id": "d8",  "nombre": "Droguería Popular Belén",       "ciudad": "Medellín", "direccion": "Cra 76 #33B-40",        "telefono": "604-235-9012" },
-    { "id": "d9",  "nombre": "La Rebaja Bello",               "ciudad": "Medellín", "direccion": "Cl 50 #45-30",          "telefono": "604-461-2299" },
-    { "id": "d10", "nombre": "Farmacias Pasteur Envigado",    "ciudad": "Medellín", "direccion": "Cra 43A #35-20",        "telefono": "604-339-5567" }
+    { "id": "1", "nombre": "Audifarma Calle 72",    "ciudad": "Bogotá" },
+    { "id": "2", "nombre": "Cafam Fontibón",        "ciudad": "Bogotá" },
+    { "id": "3", "nombre": "Cruz Verde Chapinero",  "ciudad": "Bogotá" }
   ],
+
+  "pacientes": [
+    { "cedula": "1020304050", "nombre": "Sandra Milena Duarte Marín",        "eps": "EPS Sanitas", "ciudad": "Bogotá" },
+    { "cedula": "1019283746", "nombre": "Raúl Andrés Sánchez Mondragón",     "eps": "Nueva EPS",   "ciudad": "Bogotá" }
+  ],
+
+  "formulas": [
+    { "id": "MP-20261020-0148", "cedula": "1020304050", "medicamentoId": "LOS50",  "cantidad": 30, "posologia": "1 tableta cada 12 horas",                 "fechaPrescripcion": "2026-10-20", "vigenteHasta": "2026-11-19" },
+    { "id": "MP-20261020-0149", "cedula": "1020304050", "medicamentoId": "INS100", "cantidad": 1,  "posologia": "10 UI por vía subcutánea cada noche",     "fechaPrescripcion": "2026-10-20", "vigenteHasta": "2026-11-19" },
+    { "id": "MP-20261020-0150", "cedula": "1020304050", "medicamentoId": "AC500",  "cantidad": 20, "posologia": "1 tableta cada 8 horas si hay dolor",     "fechaPrescripcion": "2026-10-20", "vigenteHasta": "2026-11-19" },
+    { "id": "MP-20261026-0231", "cedula": "1019283746", "medicamentoId": "AMX500", "cantidad": 21, "posologia": "1 cápsula cada 8 horas por 7 días",       "fechaPrescripcion": "2026-10-26", "vigenteHasta": "2026-11-25" },
+    { "id": "MP-20261026-0232", "cedula": "1019283746", "medicamentoId": "INS100", "cantidad": 1,  "posologia": "8 UI por vía subcutánea cada noche",      "fechaPrescripcion": "2026-10-26", "vigenteHasta": "2026-11-25" }
+  ],
+
   "inventario": [
-    { "id": "i1",  "medicamentoId": "m1",  "drogueriaId": "d1",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-22" },
-    { "id": "i2",  "medicamentoId": "m2",  "drogueriaId": "d1",  "stock": "Disponible", "cantidad": 340, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i3",  "medicamentoId": "m3",  "drogueriaId": "d1",  "stock": "Bajo stock", "cantidad": 18,  "ultimaActualizacion": "2026-09-21" },
-    { "id": "i4",  "medicamentoId": "m4",  "drogueriaId": "d1",  "stock": "Disponible", "cantidad": 210, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i5",  "medicamentoId": "m7",  "drogueriaId": "d1",  "stock": "Disponible", "cantidad": 150, "ultimaActualizacion": "2026-09-20" },
-    { "id": "i6",  "medicamentoId": "m9",  "drogueriaId": "d1",  "stock": "Disponible", "cantidad": 400, "ultimaActualizacion": "2026-09-22" },
+    { "medicamentoId": "LOS50",  "drogueriaId": "1", "estado": "Disponible", "ultimoReporteHaceMin": 12 },
+    { "medicamentoId": "LOS50",  "drogueriaId": "2", "estado": "Bajo stock", "ultimoReporteHaceMin": 47 },
+    { "medicamentoId": "LOS50",  "drogueriaId": "3", "estado": "Disponible", "ultimoReporteHaceMin": 5 },
 
-    { "id": "i7",  "medicamentoId": "m1",  "drogueriaId": "d2",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-23" },
-    { "id": "i8",  "medicamentoId": "m2",  "drogueriaId": "d2",  "stock": "Bajo stock", "cantidad": 22,  "ultimaActualizacion": "2026-09-22" },
-    { "id": "i9",  "medicamentoId": "m5",  "drogueriaId": "d2",  "stock": "Disponible", "cantidad": 180, "ultimaActualizacion": "2026-09-21" },
-    { "id": "i10", "medicamentoId": "m6",  "drogueriaId": "d2",  "stock": "Bajo stock", "cantidad": 9,   "ultimaActualizacion": "2026-09-23" },
-    { "id": "i11", "medicamentoId": "m8",  "drogueriaId": "d2",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-20" },
-    { "id": "i12", "medicamentoId": "m10", "drogueriaId": "d2",  "stock": "Disponible", "cantidad": 95,  "ultimaActualizacion": "2026-09-22" },
+    { "medicamentoId": "INS100", "drogueriaId": "1", "estado": "Agotado",    "ultimoReporteHaceMin": 130 },
+    { "medicamentoId": "INS100", "drogueriaId": "2", "estado": "Agotado",    "ultimoReporteHaceMin": 95 },
+    { "medicamentoId": "INS100", "drogueriaId": "3", "estado": "Agotado",    "ultimoReporteHaceMin": 210 },
 
-    { "id": "i13", "medicamentoId": "m1",  "drogueriaId": "d3",  "stock": "Bajo stock", "cantidad": 15,  "ultimaActualizacion": "2026-09-23" },
-    { "id": "i14", "medicamentoId": "m3",  "drogueriaId": "d3",  "stock": "Disponible", "cantidad": 260, "ultimaActualizacion": "2026-09-21" },
-    { "id": "i15", "medicamentoId": "m4",  "drogueriaId": "d3",  "stock": "Bajo stock", "cantidad": 30,  "ultimaActualizacion": "2026-09-22" },
-    { "id": "i16", "medicamentoId": "m7",  "drogueriaId": "d3",  "stock": "Disponible", "cantidad": 190, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i17", "medicamentoId": "m9",  "drogueriaId": "d3",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-19" },
-    { "id": "i18", "medicamentoId": "m10", "drogueriaId": "d3",  "stock": "Disponible", "cantidad": 70,  "ultimaActualizacion": "2026-09-22" },
+    { "medicamentoId": "AMX500", "drogueriaId": "1", "estado": "Disponible", "ultimoReporteHaceMin": 22 },
+    { "medicamentoId": "AMX500", "drogueriaId": "2", "estado": "Disponible", "ultimoReporteHaceMin": 31 },
+    { "medicamentoId": "AMX500", "drogueriaId": "3", "estado": "Bajo stock", "ultimoReporteHaceMin": 78 },
 
-    { "id": "i19", "medicamentoId": "m1",  "drogueriaId": "d4",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-22" },
-    { "id": "i20", "medicamentoId": "m2",  "drogueriaId": "d4",  "stock": "Disponible", "cantidad": 300, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i21", "medicamentoId": "m5",  "drogueriaId": "d4",  "stock": "Bajo stock", "cantidad": 25,  "ultimaActualizacion": "2026-09-20" },
-    { "id": "i22", "medicamentoId": "m6",  "drogueriaId": "d4",  "stock": "Disponible", "cantidad": 60,  "ultimaActualizacion": "2026-09-23" },
-    { "id": "i23", "medicamentoId": "m8",  "drogueriaId": "d4",  "stock": "Bajo stock", "cantidad": 12,  "ultimaActualizacion": "2026-09-21" },
+    { "medicamentoId": "AC500",  "drogueriaId": "1", "estado": "Agotado",    "ultimoReporteHaceMin": 180 },
+    { "medicamentoId": "AC500",  "drogueriaId": "2", "estado": "Bajo stock", "ultimoReporteHaceMin": 64 },
+    { "medicamentoId": "AC500",  "drogueriaId": "3", "estado": "Agotado",    "ultimoReporteHaceMin": 150 }
+  ],
 
-    { "id": "i24", "medicamentoId": "m1",  "drogueriaId": "d5",  "stock": "Disponible", "cantidad": 220, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i25", "medicamentoId": "m3",  "drogueriaId": "d5",  "stock": "Bajo stock", "cantidad": 20,  "ultimaActualizacion": "2026-09-22" },
-    { "id": "i26", "medicamentoId": "m4",  "drogueriaId": "d5",  "stock": "Disponible", "cantidad": 180, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i27", "medicamentoId": "m7",  "drogueriaId": "d5",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-18" },
-    { "id": "i28", "medicamentoId": "m9",  "drogueriaId": "d5",  "stock": "Disponible", "cantidad": 310, "ultimaActualizacion": "2026-09-22" },
-    { "id": "i29", "medicamentoId": "m10", "drogueriaId": "d5",  "stock": "Bajo stock", "cantidad": 14,  "ultimaActualizacion": "2026-09-21" },
+  "reservas": [
+    { "id": "R-0001", "cedula": "1019283746", "medicamentoId": "AMX500", "drogueriaId": "3", "minutosRestantes": 78 }
+  ],
 
-    { "id": "i30", "medicamentoId": "m1",  "drogueriaId": "d6",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-23" },
-    { "id": "i31", "medicamentoId": "m2",  "drogueriaId": "d6",  "stock": "Disponible", "cantidad": 280, "ultimaActualizacion": "2026-09-22" },
-    { "id": "i32", "medicamentoId": "m5",  "drogueriaId": "d6",  "stock": "Disponible", "cantidad": 200, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i33", "medicamentoId": "m6",  "drogueriaId": "d6",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-20" },
-    { "id": "i34", "medicamentoId": "m8",  "drogueriaId": "d6",  "stock": "Bajo stock", "cantidad": 10,  "ultimaActualizacion": "2026-09-22" },
-
-    { "id": "i35", "medicamentoId": "m1",  "drogueriaId": "d7",  "stock": "Bajo stock", "cantidad": 12,  "ultimaActualizacion": "2026-09-23" },
-    { "id": "i36", "medicamentoId": "m3",  "drogueriaId": "d7",  "stock": "Disponible", "cantidad": 240, "ultimaActualizacion": "2026-09-22" },
-    { "id": "i37", "medicamentoId": "m4",  "drogueriaId": "d7",  "stock": "Disponible", "cantidad": 195, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i38", "medicamentoId": "m7",  "drogueriaId": "d7",  "stock": "Disponible", "cantidad": 175, "ultimaActualizacion": "2026-09-21" },
-    { "id": "i39", "medicamentoId": "m9",  "drogueriaId": "d7",  "stock": "Bajo stock", "cantidad": 28,  "ultimaActualizacion": "2026-09-22" },
-    { "id": "i40", "medicamentoId": "m10", "drogueriaId": "d7",  "stock": "Disponible", "cantidad": 88,  "ultimaActualizacion": "2026-09-23" },
-
-    { "id": "i41", "medicamentoId": "m1",  "drogueriaId": "d8",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-22" },
-    { "id": "i42", "medicamentoId": "m2",  "drogueriaId": "d8",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-19" },
-    { "id": "i43", "medicamentoId": "m5",  "drogueriaId": "d8",  "stock": "Bajo stock", "cantidad": 16,  "ultimaActualizacion": "2026-09-21" },
-    { "id": "i44", "medicamentoId": "m6",  "drogueriaId": "d8",  "stock": "Disponible", "cantidad": 45,  "ultimaActualizacion": "2026-09-23" },
-    { "id": "i45", "medicamentoId": "m8",  "drogueriaId": "d8",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-18" },
-
-    { "id": "i46", "medicamentoId": "m1",  "drogueriaId": "d9",  "stock": "Disponible", "cantidad": 260, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i47", "medicamentoId": "m3",  "drogueriaId": "d9",  "stock": "Bajo stock", "cantidad": 19,  "ultimaActualizacion": "2026-09-22" },
-    { "id": "i48", "medicamentoId": "m4",  "drogueriaId": "d9",  "stock": "Disponible", "cantidad": 205, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i49", "medicamentoId": "m7",  "drogueriaId": "d9",  "stock": "Disponible", "cantidad": 160, "ultimaActualizacion": "2026-09-22" },
-    { "id": "i50", "medicamentoId": "m9",  "drogueriaId": "d9",  "stock": "Disponible", "cantidad": 340, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i51", "medicamentoId": "m10", "drogueriaId": "d9",  "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-17" },
-
-    { "id": "i52", "medicamentoId": "m1",  "drogueriaId": "d10", "stock": "Agotado",    "cantidad": 0,   "ultimaActualizacion": "2026-09-23" },
-    { "id": "i53", "medicamentoId": "m2",  "drogueriaId": "d10", "stock": "Disponible", "cantidad": 310, "ultimaActualizacion": "2026-09-22" },
-    { "id": "i54", "medicamentoId": "m5",  "drogueriaId": "d10", "stock": "Disponible", "cantidad": 175, "ultimaActualizacion": "2026-09-23" },
-    { "id": "i55", "medicamentoId": "m6",  "drogueriaId": "d10", "stock": "Bajo stock", "cantidad": 11,  "ultimaActualizacion": "2026-09-21" },
-    { "id": "i56", "medicamentoId": "m8",  "drogueriaId": "d10", "stock": "Disponible", "cantidad": 40,  "ultimaActualizacion": "2026-09-22" }
+  "listaEspera": [
+    { "cedula": "1019283746", "medicamentoId": "INS100", "enEsperaHaceMin": 35 }
   ]
 }
