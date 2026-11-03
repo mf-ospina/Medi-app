@@ -26,21 +26,21 @@
   ],
 
   "inventario": [
-    { "medicamentoId": "LOS50",  "drogueriaId": "1", "estado": "Disponible", "ultimoReporteHaceMin": 12 },
-    { "medicamentoId": "LOS50",  "drogueriaId": "2", "estado": "Bajo stock", "ultimoReporteHaceMin": 47 },
-    { "medicamentoId": "LOS50",  "drogueriaId": "3", "estado": "Disponible", "ultimoReporteHaceMin": 5 },
+    { "medicamentoId": "LOS50",  "drogueriaId": "1", "unidades": 180, "estado": "Disponible", "ultimoReporteHaceMin": 12 },
+    { "medicamentoId": "LOS50",  "drogueriaId": "2", "unidades": 25, "estado": "Bajo stock", "ultimoReporteHaceMin": 47 },
+    { "medicamentoId": "LOS50",  "drogueriaId": "3", "unidades": 140, "estado": "Disponible", "ultimoReporteHaceMin": 5 },
 
-    { "medicamentoId": "INS100", "drogueriaId": "1", "estado": "Agotado",    "ultimoReporteHaceMin": 130 },
-    { "medicamentoId": "INS100", "drogueriaId": "2", "estado": "Agotado",    "ultimoReporteHaceMin": 95 },
-    { "medicamentoId": "INS100", "drogueriaId": "3", "estado": "Agotado",    "ultimoReporteHaceMin": 210 },
+    { "medicamentoId": "INS100", "drogueriaId": "1", "unidades": 0, "estado": "Agotado",    "ultimoReporteHaceMin": 130 },
+    { "medicamentoId": "INS100", "drogueriaId": "2", "unidades": 0, "estado": "Agotado",    "ultimoReporteHaceMin": 95 },
+    { "medicamentoId": "INS100", "drogueriaId": "3", "unidades": 0, "estado": "Agotado",    "ultimoReporteHaceMin": 210 },
 
-    { "medicamentoId": "AMX500", "drogueriaId": "1", "estado": "Disponible", "ultimoReporteHaceMin": 22 },
-    { "medicamentoId": "AMX500", "drogueriaId": "2", "estado": "Disponible", "ultimoReporteHaceMin": 31 },
-    { "medicamentoId": "AMX500", "drogueriaId": "3", "estado": "Bajo stock", "ultimoReporteHaceMin": 78 },
+    { "medicamentoId": "AMX500", "drogueriaId": "1", "unidades": 90, "estado": "Disponible", "ultimoReporteHaceMin": 22 },
+    { "medicamentoId": "AMX500", "drogueriaId": "2", "unidades": 60, "estado": "Disponible", "ultimoReporteHaceMin": 31 },
+    { "medicamentoId": "AMX500", "drogueriaId": "3", "unidades": 15, "estado": "Bajo stock", "ultimoReporteHaceMin": 78 },
 
-    { "medicamentoId": "AC500",  "drogueriaId": "1", "estado": "Agotado",    "ultimoReporteHaceMin": 180 },
-    { "medicamentoId": "AC500",  "drogueriaId": "2", "estado": "Bajo stock", "ultimoReporteHaceMin": 64 },
-    { "medicamentoId": "AC500",  "drogueriaId": "3", "estado": "Agotado",    "ultimoReporteHaceMin": 150 }
+    { "medicamentoId": "AC500",  "drogueriaId": "1", "unidades": 0, "estado": "Agotado",    "ultimoReporteHaceMin": 180 },
+    { "medicamentoId": "AC500",  "drogueriaId": "2", "unidades": 30, "estado": "Bajo stock", "ultimoReporteHaceMin": 64 },
+    { "medicamentoId": "AC500",  "drogueriaId": "3", "unidades": 0, "estado": "Agotado",    "ultimoReporteHaceMin": 150 }
   ],
 
   "reservas": [
@@ -49,5 +49,13 @@
 
   "listaEspera": [
     { "cedula": "1019283746", "medicamentoId": "INS100", "enEsperaHaceMin": 35 }
-  ]
+  ],
+
+  "historial": {
+    "_nota": "Existencias totales en la red por día, de hace 14 días hasta ayer (datos simulados). El punto de hoy se calcula del inventario actual.",
+    "LOS50":  [360, 355, 362, 350, 358, 352, 349, 355, 348, 351, 346, 350, 347, 349],
+    "INS100": [90, 80, 75, 70, 60, 55, 45, 40, 30, 25, 15, 10, 5, 0],
+    "AMX500": [520, 480, 455, 420, 390, 365, 335, 310, 285, 260, 235, 215, 195, 180],
+    "AC500":  [400, 360, 330, 290, 255, 225, 190, 160, 130, 105, 85, 65, 50, 40]
+  }
 }

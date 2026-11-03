@@ -39,6 +39,7 @@ function initState(data) {
     medicamentoId: r.medicamentoId,
     drogueriaId: r.drogueriaId,
     estado: r.estado,
+    unidades: r.unidades,
     ultimoReporte: now - r.ultimoReporteHaceMin * 60000
   }));
   RESERVAS = data.reservas.map((r) => ({
@@ -295,10 +296,11 @@ function handleStockUpdate(ev) {
 
   let row = findRow(medId, storeId);
   if (!row) {
-    row = { medicamentoId: medId, drogueriaId: storeId, estado, ultimoReporte: Date.now() };
+    row = { medicamentoId: medId, drogueriaId: storeId, estado, unidades: 0, ultimoReporte: Date.now() };
     INV.push(row);
   }
   row.estado = estado;
+  row.unidades = unidadesParaEstado(estado, row.unidades);
   row.ultimoReporte = Date.now();
 
   let msg = `Stock actualizado: ${medLabel(getMed(medId))} en ${getStore(storeId).nombre} ahora figura como "${estado}".`;
@@ -352,6 +354,7 @@ function renderInventoryTable() {
 
 /* ---------- Pestaña 3: Dashboard institucional ---------- */
 function renderDashboard() {
+  renderPrediction();
   $("kpiActiveReservations").textContent = RESERVAS.length;
   $("kpiWaitlistCount").textContent = ESPERA.length;
   $("kpiShortageAlerts").textContent = INV.filter((r) => r.estado === "Agotado").length;
@@ -370,6 +373,100 @@ function renderDashboard() {
           </div>
         </div>`).join("")
     : `<p class="text-sm text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center">No hay ciudadanos en fila virtual.</p>`;
+}
+
+/* ---------- Predicción de desabastecimiento (regresión lineal) ---------- */
+// El formulario solo captura el estado; para la simulación se asigna un nivel de unidades representativo.
+function unidadesParaEstado(estado, actual) {
+  if (estado === "Agotado") return 0;
+  if (estado === "Bajo stock") return actual > 0 && actual <= 40 ? actual : 25;
+  return actual >= 100 ? actual : 150; // Disponible
+}
+
+const RISK = {
+  alto:  { label: "Riesgo alto",  badge: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300",          line: "text-rose-600 dark:text-rose-400",       accion: "Reponer de inmediato y alertar a SuperSalud" },
+  medio: { label: "Riesgo medio", badge: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",      line: "text-amber-600 dark:text-amber-400",     accion: "Programar reposición esta semana" },
+  bajo:  { label: "Riesgo bajo",  badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300", line: "text-emerald-600 dark:text-emerald-400", accion: "Sin acción requerida" }
+};
+
+// Mínimos cuadrados: y = intercepto + pendiente·x  (x = día, y = unidades en la red). R² mide qué tan lineal es la tendencia.
+function linearRegression(ys) {
+  const n = ys.length;
+  const mx = (n - 1) / 2;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0, sxx = 0, syy = 0;
+  ys.forEach((y, x) => { sxy += (x - mx) * (y - my); sxx += (x - mx) ** 2; syy += (y - my) ** 2; });
+  const slope = sxx ? sxy / sxx : 0;
+  const r2 = syy ? (sxy * sxy) / (sxx * syy) : 1;
+  return { slope, r2 };
+}
+
+const HORIZONTE_DIAS = 60; // más allá de este plazo la proyección lineal no es confiable: se considera estable
+
+function predictMed(medId) {
+  const hist = (DB.historial && DB.historial[medId]) || [];
+  const actual = INV.filter((r) => r.medicamentoId === medId).reduce((s, r) => s + (r.unidades || 0), 0);
+  const ys = [...hist, actual]; // el último punto es "hoy", tomado del inventario en vivo
+  const { slope, r2 } = linearRegression(ys);
+  let dias = null; // null = tendencia estable o al alza, no hay agotamiento proyectado
+  if (actual <= 0) dias = 0;
+  else if (slope < -0.5 && actual / -slope <= HORIZONTE_DIAS) dias = actual / -slope;
+  const nivel = dias !== null && dias <= 3 ? "alto" : dias !== null && dias <= 10 ? "medio" : "bajo";
+  return { medId, actual, ys, slope, r2, dias, nivel };
+}
+
+function sparkline(p) {
+  const W = 120, H = 32, ext = 5; // se proyectan 5 días hacia adelante
+  const total = p.ys.length - 1 + ext;
+  const lastI = p.ys.length - 1;
+  const endY = Math.max(0, p.ys[lastI] + p.slope * ext);
+  const maxY = Math.max(1, ...p.ys);
+  const px = (i) => ((i / total) * W).toFixed(1);
+  const py = (v) => (H - 2 - (v / maxY) * (H - 4)).toFixed(1);
+  const pts = p.ys.map((v, i) => `${px(i)},${py(v)}`).join(" ");
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full h-8" aria-hidden="true">
+    <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    <line x1="${px(lastI)}" y1="${py(p.ys[lastI])}" x2="${px(total)}" y2="${py(endY)}" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3" opacity=".7"/>
+  </svg>`;
+}
+
+function renderPrediction() {
+  const list = $("predictionList");
+  if (!list) return;
+  const preds = DB.medicamentos
+    .map((m) => predictMed(m.id))
+    .sort((a, b) => (a.dias ?? Infinity) - (b.dias ?? Infinity));
+
+  const altos = preds.filter((p) => p.nivel === "alto").length;
+  const medios = preds.filter((p) => p.nivel === "medio").length;
+  $("predictionSummary").textContent = `${altos} en riesgo alto · ${medios} en riesgo medio`;
+
+  list.innerHTML = preds.map((p) => {
+    const med = getMed(p.medId);
+    const rk = RISK[p.nivel];
+    const diasTxt = p.dias === null ? "Estable" : p.dias === 0 ? "Agotado" : `${p.dias.toFixed(1)} días`;
+    const tend = `${p.slope >= 0 ? "+" : ""}${p.slope.toFixed(1)} u/día`;
+    return `
+      <div class="grid grid-cols-1 md:grid-cols-12 items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-200 dark:border-gray-600">
+        <div class="md:col-span-4">
+          <p class="text-sm font-semibold">${medLabel(med)}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">${p.actual} unidades en la red · ${rk.accion}</p>
+        </div>
+        <div class="md:col-span-2">
+          <p class="text-xs text-gray-500 dark:text-gray-400">Tendencia</p>
+          <p class="text-sm font-mono font-semibold">${tend}</p>
+          <p class="text-xs text-gray-400 dark:text-gray-500">Ajuste R² ${p.r2.toFixed(2)}</p>
+        </div>
+        <div class="md:col-span-2">
+          <p class="text-xs text-gray-500 dark:text-gray-400">Se agota en</p>
+          <p class="text-sm font-bold">${diasTxt}</p>
+        </div>
+        <div class="md:col-span-2 ${rk.line}">${sparkline(p)}</div>
+        <div class="md:col-span-2 md:text-right">
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${rk.badge}"><i class="fa-solid fa-circle text-[8px] mr-1.5"></i>${rk.label}</span>
+        </div>
+      </div>`;
+  }).join("");
 }
 
 /* ---------- Render global y temporizador ---------- */
@@ -524,72 +621,84 @@ const FALLBACK_DATA = {
     {
       "medicamentoId": "LOS50",
       "drogueriaId": "1",
+      "unidades": 180,
       "estado": "Disponible",
       "ultimoReporteHaceMin": 12
     },
     {
       "medicamentoId": "LOS50",
       "drogueriaId": "2",
+      "unidades": 25,
       "estado": "Bajo stock",
       "ultimoReporteHaceMin": 47
     },
     {
       "medicamentoId": "LOS50",
       "drogueriaId": "3",
+      "unidades": 140,
       "estado": "Disponible",
       "ultimoReporteHaceMin": 5
     },
     {
       "medicamentoId": "INS100",
       "drogueriaId": "1",
+      "unidades": 0,
       "estado": "Agotado",
       "ultimoReporteHaceMin": 130
     },
     {
       "medicamentoId": "INS100",
       "drogueriaId": "2",
+      "unidades": 0,
       "estado": "Agotado",
       "ultimoReporteHaceMin": 95
     },
     {
       "medicamentoId": "INS100",
       "drogueriaId": "3",
+      "unidades": 0,
       "estado": "Agotado",
       "ultimoReporteHaceMin": 210
     },
     {
       "medicamentoId": "AMX500",
       "drogueriaId": "1",
+      "unidades": 90,
       "estado": "Disponible",
       "ultimoReporteHaceMin": 22
     },
     {
       "medicamentoId": "AMX500",
       "drogueriaId": "2",
+      "unidades": 60,
       "estado": "Disponible",
       "ultimoReporteHaceMin": 31
     },
     {
       "medicamentoId": "AMX500",
       "drogueriaId": "3",
+      "unidades": 15,
       "estado": "Bajo stock",
       "ultimoReporteHaceMin": 78
     },
     {
       "medicamentoId": "AC500",
       "drogueriaId": "1",
+      "unidades": 0,
       "estado": "Agotado",
       "ultimoReporteHaceMin": 180
     },
     {
       "medicamentoId": "AC500",
       "drogueriaId": "2",
+      "unidades": 30,
       "estado": "Bajo stock",
       "ultimoReporteHaceMin": 64
     },
     {
       "medicamentoId": "AC500",
       "drogueriaId": "3",
+      "unidades": 0,
       "estado": "Agotado",
       "ultimoReporteHaceMin": 150
     }
@@ -609,6 +718,73 @@ const FALLBACK_DATA = {
       "medicamentoId": "INS100",
       "enEsperaHaceMin": 35
     }
-  ]
+  ],
+  "historial": {
+    "_nota": "Existencias totales en la red por día, de hace 14 días hasta ayer (datos simulados). El punto de hoy se calcula del inventario actual.",
+    "LOS50": [
+      360,
+      355,
+      362,
+      350,
+      358,
+      352,
+      349,
+      355,
+      348,
+      351,
+      346,
+      350,
+      347,
+      349
+    ],
+    "INS100": [
+      90,
+      80,
+      75,
+      70,
+      60,
+      55,
+      45,
+      40,
+      30,
+      25,
+      15,
+      10,
+      5,
+      0
+    ],
+    "AMX500": [
+      520,
+      480,
+      455,
+      420,
+      390,
+      365,
+      335,
+      310,
+      285,
+      260,
+      235,
+      215,
+      195,
+      180
+    ],
+    "AC500": [
+      400,
+      360,
+      330,
+      290,
+      255,
+      225,
+      190,
+      160,
+      130,
+      105,
+      85,
+      65,
+      50,
+      40
+    ]
+  }
 };
 init();

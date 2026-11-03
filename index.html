@@ -238,6 +238,22 @@
         </div>
       </div>
 
+      <!-- Predicción de Desabastecimiento (IA) -->
+      <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1">
+          <h2 class="text-lg font-bold flex items-center space-x-2">
+            <i class="fa-solid fa-brain text-brand-600"></i>
+            <span>Predicción de Desabastecimiento (IA)</span>
+          </h2>
+          <span id="predictionSummary" class="px-3 py-1 bg-brand-50 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 rounded-full text-xs font-semibold"></span>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">Regresión lineal sobre el historial de existencias de los últimos 14 días en toda la red. Estima en cuántos días se agota cada medicamento si la tendencia continúa.</p>
+        <div id="predictionList" class="space-y-3">
+          <!-- Renderizado dinámico desde app.js -->
+        </div>
+        <p class="text-xs text-gray-400 dark:text-gray-500 mt-4">Datos simulados: la predicción demuestra el mecanismo, no la precisión de un modelo real. Semáforo: rojo ≤ 3 días · amarillo ≤ 10 días · verde &gt; 10 días o tendencia estable (horizonte de proyección: 60 días).</p>
+      </div>
+
       <!-- Panel de Trazabilidad e Impacto -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
